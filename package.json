@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run compile && vite",
-    "build": "npm run compile && vite build",
+    "build": "npm run compile && vite build && node scripts/build-worker.mjs",
     "preview": "vite preview",
     "compile": "node scripts/compile.mjs",
     "test": "npm run compile && node --test test/*.test.mjs",
@@ -15,11 +15,14 @@
     "viem": "2.55.18"
   },
   "devDependencies": {
-    "solc": "0.8.26",
+    "solc": "0.8.39",
     "vite": "6.4.5"
   },
   "overrides": {
     "rollup": "4.67.4",
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "solc": {
+      "tmp": "0.2.7"
+    }
   }
 }

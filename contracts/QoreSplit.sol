@@ -95,7 +95,9 @@ contract QoreSplit {
             abi.encodeCall(INativeBridge.executeCrossVMCall, (1, RECEIPTS, payload))
         );
         if (!success) revert NativeReceiptRejected(reply);
-        if (reply.length == 0) revert BridgeUnavailable();
+        // The pinned receipt book returns JSON with a sender, note, ID and height.
+        // Both an absent precompile and ABI-encoded empty bytes fail this check.
+        if (reply.length <= 64) revert BridgeUnavailable();
 
         emit Checkout(id, msg.sender, paymentId, msg.value, commitment, credits, reply);
     }

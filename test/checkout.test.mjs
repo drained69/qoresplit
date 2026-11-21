@@ -19,9 +19,11 @@ const mockSource = `
 pragma solidity ^0.8.26;
 contract BridgeMock {
     bool public rejects;
+    bool public emptyReply;
     uint256 public records;
     event NativeRecord(bytes payload);
     function setRejects(bool next) external { rejects = next; }
+    function setEmptyReply(bool next) external { emptyReply = next; }
     function executeCrossVMCall(uint8 vm, string calldata target, bytes calldata payload)
         external returns (bytes memory)
     {
@@ -29,6 +31,7 @@ contract BridgeMock {
         ++records;
         emit NativeRecord(payload);
         require(!rejects, "Native receipt refused");
+        if (emptyReply) return bytes("");
         return bytes('{"id":1}');
     }
 }
@@ -181,6 +184,14 @@ test('rolls back credits and permits retry if Native rejects or the bridge is ab
     assert.equal(await records(), recordsBefore);
   } finally {
     await mockWrite('setRejects', [false]);
+  }
+  await mockWrite('setEmptyReply', [true]);
+  try {
+    assert.equal((await send(payer, 'checkout', [id, ref], price)).status, 'reverted');
+    assert.equal(await read('claimable', [alice]), before);
+    assert.equal(await records(), recordsBefore);
+  } finally {
+    await mockWrite('setEmptyReply', [false]);
   }
   await publicClient.request({ method: 'anvil_setCode', params: [bridge, '0x'] });
   try {

@@ -8,13 +8,12 @@ import artifact from '../artifacts/QoreSplit.json';
 
 export const abi = artifact.abi;
 export const RPC = 'https://evm-testnet.qore.host';
-export const NATIVE_REST = 'https://api-testnet.qore.host';
-export const RECEIPTS = 'qor1xjayq5ev55tkzpml9klxwyshr7gdrha0nurha9jhm0f0gdckksgs3gltw8';
 export const chain = defineChain({
   id: 9800, name: 'QoreChain Diana',
   nativeCurrency: { name: 'Test QOR', symbol: 'QOR', decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 });
+let deploymentCheck;
 const configuredAddress = import.meta.env.VITE_QORESPLIT_ADDRESS?.trim();
 export const address = isAddress(configuredAddress ?? '') && configuredAddress !== zeroAddress
   ? getAddress(configuredAddress) : undefined;
@@ -72,10 +71,21 @@ export function validateLink(title, priceText, recipientTexts, shareTexts) {
   return [title, price, recipients, shares];
 }
 
+const announcedWallets = new Map();
+window.addEventListener('eip6963:announceProvider', ({ detail }) => {
+  if (detail?.info?.rdns && typeof detail.provider?.request === 'function') {
+    announcedWallets.set(detail.info.rdns, detail.provider);
+  }
+});
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+
 export function selectWallet() {
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
   const listed = window.ethereum?.providers ?? [window.ethereum];
-  return listed.find((provider) => provider?.isMetaMask && !provider?.isQoreX) ??
-    listed.find((provider) => provider && !provider.isQoreX);
+  return announcedWallets.get('io.metamask') ??
+    listed.find((provider) => provider?.isMetaMask && !provider?.isQoreX) ??
+    [...announcedWallets].find(([rdns, provider]) => rdns !== 'network.qore.qorex' && !provider.isQoreX)?.[1] ??
+    listed.find((provider) => typeof provider?.request === 'function' && !provider.isQoreX);
 }
 
 export async function requestWallet(provider) {
@@ -97,14 +107,27 @@ export async function switchToDiana(provider) {
   });
 }
 
-export function read(functionName, args = []) {
+async function assertDeployment() {
   if (!address) throw new Error('Configure the Diana deployment to use live payments.');
+  deploymentCheck ??= Promise.all([client.getChainId(), client.getCode({ address })]).then(([chainId, code]) => {
+    if (chainId !== chain.id || code?.toLowerCase() !== artifact.runtime.toLowerCase()) {
+      throw new Error('Diana did not return the expected QoreSplit contract code.');
+    }
+  }).catch((error) => {
+    deploymentCheck = undefined;
+    throw error;
+  });
+  await deploymentCheck;
+}
+
+export async function read(functionName, args = []) {
+  await assertDeployment();
   return client.readContract({ address, abi, functionName, args });
 }
 
 export async function checkWindow(account) {
   const qorAddress = bech32.encode('qor', bech32.toWords(hexToBytes(account)));
-  const response = await fetch(NATIVE_REST + '/qorechain/pqc/v1/evm_window/' + qorAddress, {
+  const response = await fetch('/api/native/windows/' + qorAddress, {
     signal: AbortSignal.timeout(10_000),
   });
   if (response.status === 404) return { active: false, qorAddress };
@@ -119,7 +142,7 @@ export async function checkWindow(account) {
 }
 
 export async function transact(provider, account, functionName, args = [], value, onHash) {
-  if (!address) throw new Error('Configure the Diana deployment to use live payments.');
+  await assertDeployment();
   await switchToDiana(provider);
   const wallet = createWalletClient({ chain, transport: custom(provider) });
   const { request } = await client.simulateContract({ account, address, abi, functionName, args, value });
@@ -130,7 +153,7 @@ export async function transact(provider, account, functionName, args = [], value
   return receipt;
 }
 
-export function getEvent(receipt, eventName) {
+export function getEvent(receipt, eventName, { optional = false } = {}) {
   for (const log of receipt.logs) {
     if (log.address.toLowerCase() !== address?.toLowerCase()) continue;
     try {
@@ -138,7 +161,14 @@ export function getEvent(receipt, eventName) {
       if (event.eventName === eventName) return event.args;
     } catch { /* Other logs are irrelevant to this event. */ }
   }
-  throw new Error('This transaction has no QoreSplit ' + eventName + ' event.');
+  if (!optional) throw new Error('This transaction has no QoreSplit ' + eventName + ' event.');
+}
+
+export function checkoutId(linkId, payer, reference) {
+  return keccak256(encodeAbiParameters(
+    [{ type: 'uint256' }, { type: 'address' }, { type: 'bytes32' }],
+    [linkId, payer, reference]
+  ));
 }
 
 export function paymentCommitment({ linkId, payer, paymentId, total, credits }, recipients, contract = address) {
@@ -158,13 +188,16 @@ export function decodeNativeReply(reply) {
 }
 
 export async function verifyReceipt(hash) {
-  if (!address) throw new Error('Configure the Diana deployment to verify live receipts.');
+  await assertDeployment();
   if (!/^0x[\da-f]{64}$/i.test(hash)) throw new Error('Enter a 0x transaction hash with 64 hexadecimal digits.');
   const receipt = await client.getTransactionReceipt({ hash });
   if (receipt.status !== 'success') throw new Error('This transaction reverted. It did not create a receipt.');
   const payment = getEvent(receipt, 'Checkout');
   const link = await read('getLink', [payment.linkId]);
-  if (payment.commitment !== paymentCommitment(payment, link.recipients)) {
+  const expectedCredits = splitAmounts(link.price, link.shares);
+  if (payment.total !== link.price || payment.credits.length !== expectedCredits.length ||
+      payment.credits.some((credit, i) => credit !== expectedCredits[i]) ||
+      payment.commitment !== paymentCommitment(payment, link.recipients)) {
     throw new Error('The EVM payment does not match its receipt commitment.');
   }
 
@@ -173,8 +206,7 @@ export async function verifyReceipt(hash) {
   try {
     const reply = decodeNativeReply(payment.nativeReply);
     if (!Number.isSafeInteger(reply.id) || reply.id < 1) throw new Error('The bridge returned an invalid Native receipt ID.');
-    const path = btoa(JSON.stringify({ receipt: { id: reply.id } }));
-    const response = await fetch(NATIVE_REST + '/cosmwasm/wasm/v1/contract/' + RECEIPTS + '/smart/' + encodeURIComponent(path), {
+    const response = await fetch('/api/native/receipts/' + reply.id, {
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error('The Native receipt could not be read from Diana.');

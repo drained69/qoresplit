@@ -1,6 +1,6 @@
 import './style.css';
 import {
-  address, checkWindow, client, formatQor, getEvent, parsePrice, parseShare, read, requestWallet,
+  address, checkWindow, checkoutId, client, formatQor, getEvent, parsePrice, parseShare, read, requestWallet,
   selectWallet, short, splitAmounts, transact, validateLink, verifyReceipt,
 } from './chain.js';
 
@@ -32,6 +32,7 @@ const errorMessage = (error) => {
 };
 const explorerTx = (hash) => 'https://explore.qore.network/tx/' + hash;
 const linkURL = (fragment) => new URL('#' + fragment, location.href).href;
+const contractRoute = (route, value) => route + '/' + address + '/' + value;
 const validHash = (hash) => /^0x[\da-f]{64}$/i.test(hash ?? '');
 const shareLabel = (bps) => String(Number(bps) / 100) + '%';
 const icon = (text) => '<span class="step-icon" aria-hidden="true">' + text + '</span>';
@@ -82,11 +83,10 @@ async function run(action) {
   }
 }
 
-async function write(name, args, value, rememberHash) {
+async function write(name, args, value) {
   const signer = await connect();
   return transact(provider, signer, name, args, value, (hash) => {
     operationStatus = hash;
-    rememberHash?.(hash);
     alert('Submitted ' + hash + '. Waiting for confirmation…');
   });
 }
@@ -201,7 +201,7 @@ function createPage() {
         data.getAll('recipient').map(trim), data.getAll('share').map(trim));
       const receipt = await write('createLink', args);
       const { linkId } = getEvent(receipt, 'LinkCreated');
-      if (location.href === route) location.hash = 'pay/' + linkId;
+      if (location.href === route) location.hash = contractRoute('pay', linkId);
     });
   };
 }
@@ -214,41 +214,49 @@ async function payPage(id, revision) {
     <div class="layout"><section class="card action"><h2>Pay ${formatQor(link.price)}</h2>
     <p>Review the recipients before approving the testnet payment. Each share is credited at checkout and can be withdrawn separately.</p>
     <button class="primary" id="pay" type="button">Pay ${formatQor(link.price)}</button>
-    <label class="share-link">Share this checkout<input id="share-url" readonly value="${escape(linkURL('pay/' + id))}"></label>
+    <label class="share-link">Share this checkout<input id="share-url" readonly value="${escape(linkURL(contractRoute('pay', id)))}"></label>
     <button class="secondary" id="copy" type="button">Copy payment link</button></section>
     ${splitCard(link, 'Recipients', credits)}</div>`;
-  document.querySelector('#copy').onclick = (event) => copy(linkURL('pay/' + id), event.currentTarget);
+  document.querySelector('#copy').onclick = (event) => copy(linkURL(contractRoute('pay', id)), event.currentTarget);
   let reference;
   const pendingKey = 'qoresplit:pending:' + address + ':' + id;
-  let retryHash;
+  let pending;
   try {
-    const stored = localStorage.getItem(pendingKey);
-    if (validHash(stored)) retryHash = stored;
+    const stored = JSON.parse(localStorage.getItem(pendingKey));
+    if (validHash(stored?.hash) && validHash(stored?.paymentId)) pending = stored;
   } catch { /* In-memory retry remains available if storage is disabled. */ }
 
-  function savePending(hash) {
-    retryHash = hash;
+  function savePending(value) {
+    pending = value;
     try {
-      if (hash) localStorage.setItem(pendingKey, hash);
+      if (value) localStorage.setItem(pendingKey, JSON.stringify(value));
       else localStorage.removeItem(pendingKey);
     } catch { /* In-memory retry remains available if storage is disabled. */ }
   }
 
   const pay = document.querySelector('#pay');
-  if (retryHash) pay.textContent = 'Check submitted payment';
+  if (pending) pay.textContent = 'Check submitted payment';
+
+  function complete(receipt, expectedPaymentId, route) {
+    const payment = receipt.status === 'success'
+      ? getEvent(receipt, 'Checkout', { optional: true })
+      : undefined;
+    savePending(undefined);
+    reference = undefined;
+    if (payment?.linkId === BigInt(id) && payment.paymentId === expectedPaymentId) {
+      if (location.href === route) location.hash = contractRoute('receipt', receipt.transactionHash);
+      return;
+    }
+    pay.textContent = 'Pay ' + formatQor(link.price);
+    if (location.href === route) alert('The confirmed transaction did not complete this checkout. Review it before paying again.', 'error');
+  }
   pay.onclick = () => void run(async (route) => {
-    if (retryHash) {
-      operationStatus = retryHash;
-      alert('Checking checkout transaction ' + retryHash + '…');
-      const existing = await client.waitForTransactionReceipt({ hash: retryHash, timeout: 90_000 });
-      savePending(undefined);
-      reference = undefined;
-      if (existing.status === 'success') {
-        if (location.href === route) location.hash = 'receipt/' + existing.transactionHash;
-      } else {
-        pay.textContent = 'Pay ' + formatQor(link.price);
-        alert('The previous checkout reverted. You can submit a new payment.', 'error');
-      }
+    if (pending) {
+      const { hash, paymentId } = pending;
+      operationStatus = hash;
+      alert('Checking checkout transaction ' + hash + '…');
+      const receipt = await client.waitForTransactionReceipt({ hash, timeout: 90_000 });
+      complete(receipt, paymentId, route);
       return;
     }
     if (!reference) {
@@ -256,12 +264,16 @@ async function payPage(id, revision) {
       reference = '0x' + Array.from(random, (value) => value.toString(16).padStart(2, '0')).join('');
     }
     try {
-      const receipt = await write('checkout', [BigInt(id), reference], link.price, savePending);
-      savePending(undefined);
-      reference = undefined;
-      if (location.href === route) location.hash = 'receipt/' + receipt.transactionHash;
+      const signer = await connect();
+      const paymentId = checkoutId(BigInt(id), signer, reference);
+      const receipt = await transact(provider, signer, 'checkout', [BigInt(id), reference], link.price, (hash) => {
+        operationStatus = hash;
+        savePending({ hash, paymentId });
+        alert('Submitted ' + hash + '. Waiting for confirmation…');
+      });
+      complete(receipt, paymentId, route);
     } catch (error) {
-      if (retryHash) pay.textContent = 'Check submitted payment';
+      if (pending) pay.textContent = 'Check submitted payment';
       throw error;
     }
   });
@@ -313,7 +325,7 @@ function verifyPage() {
     event.preventDefault();
     const hash = new FormData(event.currentTarget).get('hash').trim();
     if (!validHash(hash)) { alert('Enter a 0x transaction hash with 64 hexadecimal digits.', 'error'); return; }
-    location.hash = 'receipt/' + hash.toLowerCase();
+    location.hash = contractRoute('receipt', hash.toLowerCase());
   };
 }
 
@@ -330,12 +342,12 @@ async function receiptPage(hash, revision) {
     <div class="actions"><a class="secondary" href="${explorerTx(hash)}" target="_blank" rel="noreferrer">View transaction</a>
     <button class="secondary" id="copy" type="button">Copy receipt link</button></div></section>
     ${splitCard(link, 'Shares credited', payment.credits)}</div>`;
-  document.querySelector('#copy').onclick = (event) => copy(linkURL('receipt/' + hash), event.currentTarget);
+  document.querySelector('#copy').onclick = (event) => copy(linkURL(contractRoute('receipt', hash)), event.currentTarget);
 }
 
 async function render() {
   const revision = ++rendering;
-  const [route, parameter] = (location.hash.slice(1) || 'create').split('/');
+  const [route, deployment, parameter, extra] = (location.hash.slice(1) || 'create').split('/');
   alert('');
   for (const link of document.querySelectorAll('[data-route]')) {
     if (link.dataset.route === route) link.setAttribute('aria-current', 'page');
@@ -346,6 +358,9 @@ async function render() {
     else if (route === 'verify') verifyPage();
     else if (route === 'withdraw') await withdrawPage(revision);
     else if (route === 'pay' || route === 'receipt') {
+      if (extra !== undefined || !address || deployment?.toLowerCase() !== address.toLowerCase()) {
+        throw new Error('This link requires its original QoreSplit Diana deployment.');
+      }
       content.innerHTML = '<div class="intro"><h1>Reading QoreChain</h1><p>Waiting for Diana testnet data…</p></div>';
       if (route === 'pay') await payPage(parameter ?? '', revision);
       else await receiptPage(parameter ?? '', revision);
