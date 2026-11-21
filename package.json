@@ -1,0 +1,25 @@
+{
+  "name": "qoresplit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run compile && vite",
+    "build": "npm run compile && vite build",
+    "preview": "vite preview",
+    "compile": "node scripts/compile.mjs",
+    "test": "npm run compile && node --test test/*.test.mjs",
+    "deploy": "npm run compile && node --env-file-if-exists=.env scripts/deploy.mjs"
+  },
+  "dependencies": {
+    "@scure/base": "1.2.6",
+    "viem": "2.55.18"
+  },
+  "devDependencies": {
+    "solc": "0.8.26",
+    "vite": "6.4.5"
+  },
+  "overrides": {
+    "rollup": "4.67.4",
+    "esbuild": "0.25.12"
+  }
+}
