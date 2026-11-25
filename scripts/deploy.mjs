@@ -3,6 +3,7 @@ import { createPublicClient, createWalletClient, defineChain, hexToBytes, http }
 import { bech32 } from '@scure/base';
 import { NATIVE_REST, RECEIPTS } from '../server/native.mjs';
 import { privateKeyToAccount } from 'viem/accounts';
+import { registeredKey } from './pqc.mjs';
 
 const key = process.env.DIANA_DEPLOYER_KEY;
 if (!/^0x[\da-f]{64}$/i.test(key ?? '')) {
@@ -42,6 +43,11 @@ try {
   }
   if (!window.live || window.native_only || window.allowed_targets?.length) {
     throw new Error('Open a live Diana EVM window that permits contract creation.');
+  }
+  // QoreSplit reads signers' keys through the pqcKeyStatus precompile; check it answers here.
+  const key = await registeredKey(client, account.address);
+  if (!key.registered || !key.proven || key.pubkey.length !== 2 + 2592 * 2) {
+    throw new Error('The pqcKeyStatus precompile did not return a proven ML-DSA-87 key for the deployer.');
   }
 
   const hash = await wallet.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode });
