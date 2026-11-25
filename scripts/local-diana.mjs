@@ -1,9 +1,9 @@
-// A local stand-in for QoreChain Diana, for end-to-end runs of the real deploy script,
-// signing tool and web app. No network is needed.
+// A local stand-in for QoreChain Diana, for end-to-end runs and demos of the real deploy
+// script, signing tool, agent SDK and web app. No network is needed.
 //
 // - A Hardhat node with chain ID 9800 runs the EVM.
 // - The ML-DSA-87 precompiles are stand-ins, but their answers come from real
-//   cryptography: before a QoreSplit `sign` or `withdraw` call reaches the node,
+//   cryptography: before a QorePact call signed with ML-DSA-87 reaches the node,
 //   this server verifies the ML-DSA-87 signature with @qorechain/sdk against the
 //   registered key and the exact bytes the contract will check, and only then
 //   attests it to the pqcVerify stand-in. A forged signature is never attested.
@@ -107,8 +107,8 @@ function readBody(request) {
 
 export async function startDiana({ abi }) {
   const nodePort = await freePort();
-  const hardhat = fileURLToPath(new URL('../../node_modules/hardhat/internal/cli/bootstrap.js', import.meta.url));
-  const config = fileURLToPath(new URL('./hardhat.config.cjs', import.meta.url));
+  const hardhat = fileURLToPath(new URL('../node_modules/hardhat/internal/cli/bootstrap.js', import.meta.url));
+  const config = fileURLToPath(new URL('./local-diana.hardhat.cjs', import.meta.url));
   const node = spawn(process.execPath, [hardhat, 'node', '--config', config, '--port', String(nodePort)], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -147,45 +147,81 @@ export async function startDiana({ abi }) {
     if (receipt.status !== 'success') throw new Error(functionName + ' failed on the stand-in');
   }
   const registered = new Map();
+  /** Distinct signatures checked with real ML-DSA-87: accepted, and refused. */
   const stats = { verified: 0, refused: 0 };
+  const verified = new Set();
+  const refused = new Set();
   let contract;
 
-  /** Verify a QoreSplit signature for real, and attest it to the pqcVerify stand-in if it holds. */
+  const view = (functionName, args) => client.readContract({ address: contract, abi, functionName, args });
+
+  /** The (account, message, signature) pairs a QorePact call will ask pqcVerify about. */
+  async function signaturesIn(functionName, args) {
+    switch (functionName) {
+      case 'sign': {
+        const [id, signer, signature] = args;
+        return [[signer, await view('termsMessage', [id, signer]), signature]];
+      }
+      case 'deliver': {
+        const [id, provider, deliverable, signature] = args;
+        const { deliveries } = await view('getAgreement', [id]);
+        return [[provider, await view('deliveryMessage', [id, BigInt(deliveries), provider, deliverable]), signature]];
+      }
+      case 'accept':
+      case 'reject': {
+        const [id, unit, signature] = args;
+        const { client: payer } = await view('getAgreement', [id]);
+        return [[payer, await view('reviewMessage', [id, unit, functionName === 'accept']), signature]];
+      }
+      case 'withdraw': {
+        const [recipient, to, amount, signature] = args;
+        const [signer, nonce] = await Promise.all([view('withdrawalSigner', [recipient]), view('nonces', [recipient])]);
+        return [[signer, await view('withdrawalMessage', [recipient, to, amount, nonce]), signature]];
+      }
+      case 'setMandate': {
+        const [agent, owner, maxPerPact, maxTotal, expiry, agentSignature, ownerSignature] = args;
+        const message = await view('mandateMessage', [agent, owner, maxPerPact, maxTotal, expiry]);
+        return [[agent, message, agentSignature], [owner, message, ownerSignature]];
+      }
+      case 'revokeMandate': {
+        const [agent, ownerSignature] = args;
+        const { owner } = await view('getMandate', [agent]);
+        return [[owner, await view('revokeMessage', [agent]), ownerSignature]];
+      }
+      default:
+        return [];
+    }
+  }
+
+  /** Verify QorePact signatures for real, and attest the valid ones to the pqcVerify stand-in. */
   async function attestIfValid(to, data) {
     if (!contract || !to || !data || to.toLowerCase() !== contract.toLowerCase()) return;
     let call;
     try { call = decodeFunctionData({ abi, data }); } catch { return; }
-    let account;
-    let message;
-    let signature;
+    let pairs;
     try {
-      if (call.functionName === 'sign') {
-        const [id, signer, sig] = call.args;
-        account = signer;
-        signature = sig;
-        message = await client.readContract({ address: contract, abi, functionName: 'termsMessage', args: [id, signer] });
-      } else if (call.functionName === 'withdraw') {
-        const [recipient, to_, amount, sig] = call.args;
-        const nonce = await client.readContract({ address: contract, abi, functionName: 'nonces', args: [recipient] });
-        account = recipient;
-        signature = sig;
-        message = await client.readContract({
-          address: contract, abi, functionName: 'withdrawalMessage', args: [recipient, to_, amount, nonce],
-        });
-      } else return;
+      pairs = await signaturesIn(call.functionName, call.args);
     } catch {
       return; // The node reports the real error, for example an unknown agreement.
     }
-    const pubkey = registered.get(account.toLowerCase());
-    if (!pubkey) return;
-    let valid = false;
-    try { valid = pqcVerify(hexToBytes(pubkey), hexToBytes(message), hexToBytes(signature)); } catch { valid = false; }
-    if (!valid) { stats.refused += 1; return; }
-    stats.verified += 1;
-    const digest = keccak256(encodeAbiParameters(
-      [{ type: 'bytes' }, { type: 'bytes' }, { type: 'bytes' }], [pubkey, signature, message],
-    ));
-    await operate(PQC_VERIFY, 'PqcVerifyStandIn', 'attest', [digest]);
+    for (const [account, message, signature] of pairs) {
+      const pubkey = registered.get(account.toLowerCase());
+      if (!pubkey) continue;
+      const digest = keccak256(encodeAbiParameters(
+        [{ type: 'bytes' }, { type: 'bytes' }, { type: 'bytes' }], [pubkey, signature, message],
+      ));
+      if (verified.has(digest) || refused.has(digest)) continue;
+      let valid = false;
+      try { valid = pqcVerify(hexToBytes(pubkey), hexToBytes(message), hexToBytes(signature)); } catch { valid = false; }
+      if (!valid) {
+        refused.add(digest);
+        stats.refused += 1;
+        continue;
+      }
+      verified.add(digest);
+      stats.verified += 1;
+      await operate(PQC_VERIFY, 'PqcVerifyStandIn', 'attest', [digest]);
+    }
   }
 
   async function handleRpc(body) {
@@ -258,6 +294,11 @@ export async function startDiana({ abi }) {
     async fund(account, amount = parseEther('1000')) {
       const hash = await wallet.sendTransaction({ account: operator, to: account, value: amount });
       await client.waitForTransactionReceipt({ hash });
+    },
+    /** Move the local chain's clock forward, for deadlines and review periods. */
+    async advance(seconds) {
+      await client.request({ method: 'evm_increaseTime', params: [Number(seconds)] });
+      await client.request({ method: 'evm_mine', params: [] });
     },
     async setNativeRejects(value) { await operate(BRIDGE, 'ReceiptBookStandIn', 'setRejects', [value]); },
     async stop() {

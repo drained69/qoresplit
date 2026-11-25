@@ -3,24 +3,25 @@ import {
   decodeEventLog, defineChain, formatEther, getAddress, hexToBytes, hexToString, http, isAddress, parseEther, zeroAddress,
 } from 'viem';
 import { bech32 } from '@scure/base';
-import artifact from '../artifacts/QoreSplit.json';
+import artifact from '../artifacts/QorePact.json';
 import {
-  MAX_RECIPIENTS, Status, WEI_PER_UQOR, agreementCommitment, windowProblem, parseSignedRequest, paymentCommitment, paymentNote,
-  splitAmounts, termsHash, termsNote,
+  DeliveryStatus, Kind, MAX_PARTIES, MAX_REVIEW, MAX_UNITS, MIN_REVIEW, Status, WEI_PER_UQOR, agreementCommitment, budgetOf,
+  deliveryCommitment, deliveryNote, isService, parseSignedRequest, paymentCommitment, paymentNote, splitAmounts, termsHash,
+  termsNote, windowProblem,
 } from './protocol.js';
 
 export { Status, paymentId as checkoutId, splitAmounts } from './protocol.js';
 
 export const abi = artifact.abi;
-// VITE_QORESPLIT_RPC is only for local rehearsals against a chain that reports id 9800.
-export const RPC = import.meta.env.VITE_QORESPLIT_RPC?.trim() || 'https://evm-testnet.qore.host';
+// VITE_QOREPACT_RPC is only for local rehearsals against a chain that reports id 9800.
+export const RPC = import.meta.env.VITE_QOREPACT_RPC?.trim() || 'https://evm-testnet.qore.host';
 export const chain = defineChain({
   id: 9800, name: 'QoreChain Diana',
   nativeCurrency: { name: 'Test QOR', symbol: 'QOR', decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 });
 let deploymentCheck;
-const configuredAddress = import.meta.env.VITE_QORESPLIT_ADDRESS?.trim();
+const configuredAddress = import.meta.env.VITE_QOREPACT_ADDRESS?.trim();
 export const address = isAddress(configuredAddress ?? '') && configuredAddress !== zeroAddress
   ? getAddress(configuredAddress) : undefined;
 export const client = createPublicClient({ chain, transport: http(RPC, { timeout: 12_000 }) });
@@ -45,26 +46,51 @@ export function parseShare(value) {
   return share;
 }
 
-export function validateLink(title, priceText, recipientTexts, shareTexts) {
+function validateParties(title, price, recipientTexts, shareTexts, minimum, role) {
   const titleBytes = new TextEncoder().encode(title).length;
   if (titleBytes < 1 || titleBytes > 96) throw new Error('Enter a title between 1 and 96 UTF-8 bytes.');
-  if (recipientTexts.length < 2 || recipientTexts.length > MAX_RECIPIENTS || recipientTexts.length !== shareTexts.length) {
-    throw new Error('A split needs two to ' + MAX_RECIPIENTS + ' recipients.');
+  if (recipientTexts.length < minimum || recipientTexts.length > MAX_PARTIES || recipientTexts.length !== shareTexts.length) {
+    throw new Error('A pact needs ' + (minimum === 1 ? 'one' : 'two') + ' to ' + MAX_PARTIES + ' ' + role + 's.');
   }
-  const price = parsePrice(priceText);
   const recipients = recipientTexts.map((value) => {
-    if (!isAddress(value)) throw new Error('Enter a valid 0x address for every recipient.');
+    if (!isAddress(value)) throw new Error('Enter a valid 0x address for every ' + role + '.');
     const recipient = getAddress(value);
-    if (recipient === zeroAddress || recipient === address) throw new Error('Use a recipient wallet address.');
+    if (recipient === zeroAddress || recipient === address) throw new Error('Use a wallet address for every ' + role + '.');
     return recipient;
   });
-  if (new Set(recipients).size !== recipients.length) throw new Error('Each recipient needs a different address.');
+  if (new Set(recipients).size !== recipients.length) throw new Error('Each ' + role + ' needs a different address.');
   const shares = shareTexts.map(parseShare);
   if (shares.reduce((total, share) => total + share, 0) !== 10_000) throw new Error('The percentages must add up to 100%.');
   if (shares.some((share) => price / unit * BigInt(share) < 10_000n)) {
-    throw new Error('Increase the price or share so each recipient receives at least 0.000001 QOR.');
+    throw new Error('Increase the price or share so each ' + role + ' receives at least 0.000001 QOR.');
   }
+  return [recipients, shares];
+}
+
+/** Arguments for propose(): a revenue share between two to five parties. */
+export function validateLink(title, priceText, recipientTexts, shareTexts) {
+  const price = parsePrice(priceText);
+  const [recipients, shares] = validateParties(title, price, recipientTexts, shareTexts, 2, 'party');
   return [title, price, recipients, shares];
+}
+
+/** Arguments for proposeService(): a client pays providers per delivered unit. */
+export function validateService({ title, priceText, unitsText, deadline, reviewMinutesText, clientText, providerTexts, shareTexts }) {
+  const price = parsePrice(priceText);
+  if (!/^\d{1,4}$/.test(unitsText) || Number(unitsText) < 1 || Number(unitsText) > MAX_UNITS) {
+    throw new Error('Allow between 1 and ' + MAX_UNITS + ' units.');
+  }
+  if (price * BigInt(unitsText) >= 2n ** 128n) throw new Error('The budget is above the contract limit.');
+  const seconds = Math.floor(new Date(deadline).getTime() / 1000);
+  if (!Number.isFinite(seconds) || seconds <= Date.now() / 1000 + 60) throw new Error('Choose a deadline in the future.');
+  if (!/^\d{1,5}$/.test(reviewMinutesText)) throw new Error('Give the review period in whole minutes.');
+  const review = Number(reviewMinutesText) * 60;
+  if (review < MIN_REVIEW || review > MAX_REVIEW) throw new Error('The review period must be between 1 minute and 30 days.');
+  if (!isAddress(clientText)) throw new Error('Enter the client’s 0x address.');
+  const client = getAddress(clientText);
+  const [providers, shares] = validateParties(title, price, providerTexts, shareTexts, 1, 'provider');
+  if (providers.includes(client)) throw new Error('The client cannot also be a provider.');
+  return [title, price, Number(unitsText), BigInt(seconds), review, client, providers, shares];
 }
 
 const announcedWallets = new Map();
@@ -107,7 +133,7 @@ async function assertDeployment() {
   if (!address) throw new Error('Configure the Diana deployment to use live payments.');
   deploymentCheck ??= Promise.all([client.getChainId(), client.getCode({ address })]).then(([chainId, code]) => {
     if (chainId !== chain.id || code?.toLowerCase() !== artifact.runtime.toLowerCase()) {
-      throw new Error('Diana did not return the expected QoreSplit contract code.');
+      throw new Error('Diana did not return the expected QorePact contract code.');
     }
   }).catch((error) => {
     deploymentCheck = undefined;
@@ -121,7 +147,7 @@ export async function read(functionName, args = []) {
   return client.readContract({ address, abi, functionName, args });
 }
 
-/** The account's Diana EVM window, and why it would refuse a call to QoreSplit carrying `valueWei`. */
+/** The account's Diana EVM window, and why it would refuse a call to QorePact carrying `valueWei`. */
 export async function checkWindow(account, valueWei = 0n) {
   const qorAddress = qorAddressOf(account);
   const response = await fetch('/api/native/windows/' + qorAddress, { signal: AbortSignal.timeout(10_000) });
@@ -143,7 +169,7 @@ export async function transact(provider, account, functionName, args = [], value
   const hash = await wallet.writeContract(request);
   onHash?.(hash);
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 90_000 });
-  if (receipt.status !== 'success') throw new Error('The transaction reverted. No checkout or withdrawal was recorded.');
+  if (receipt.status !== 'success') throw new Error('The transaction reverted. Nothing was recorded.');
   return receipt;
 }
 
@@ -155,12 +181,12 @@ export function getEvent(receipt, eventName, { optional = false } = {}) {
       if (event.eventName === eventName) return event.args;
     } catch { /* Other logs are irrelevant to this event. */ }
   }
-  if (!optional) throw new Error('This transaction has no QoreSplit ' + eventName + ' event.');
+  if (!optional) throw new Error('This transaction has no QorePact ' + eventName + ' event.');
 }
 
 const errorText = {
-  AgreementNotFound: 'This agreement does not exist on this deployment.',
-  NotActive: 'This agreement is not live. Every collaborator must sign it first, and a replaced version takes no payments.',
+  AgreementNotFound: 'This pact does not exist on this deployment.',
+  NotActive: 'This pact is not live. Every party must sign it first, and a replaced version takes no payments.',
   NotPending: 'This agreement is no longer waiting for signatures.',
   PreviousNotActive: 'The version this change replaces is no longer active.',
   NotASigner: 'That account is not one of the signers of this agreement.',
@@ -176,10 +202,24 @@ const errorText = {
   InvalidTerms: 'These terms are invalid.',
   InvalidWithdrawal: 'Withdraw a positive amount to a wallet address.',
   InsufficientBalance: 'That is more than the available balance.',
-  WithdrawalFailed: 'The destination refused the payment. The balance is unchanged.',
+  TransferFailed: 'The destination refused the payment. Nothing changed.',
+  WrongKind: 'That action does not apply to this kind of pact.',
+  AlreadyFunded: 'This pact’s budget is already locked.',
+  NotFunded: 'The client has not locked the budget yet.',
+  DeadlinePassed: 'The pact’s deadline has passed.',
+  DeadlineNotPassed: 'The unused budget returns only after the deadline.',
+  NoUnitsLeft: 'Every unit of this pact is delivered or waiting for review.',
+  NotAProvider: 'That account is not a provider in this pact.',
+  DeliveryNotPending: 'That delivery is no longer waiting for review.',
+  ReviewPeriodOver: 'The review period for that delivery is over.',
+  ReviewPeriodNotOver: 'The client can still review that delivery.',
+  NothingToRefund: 'There is no unused budget to return.',
+  AgentNotAuthorized: 'That agent was switched off by its owner, or its mandate expired.',
+  MandateLimitExceeded: 'This would go over the limits the agent’s owner set.',
+  InvalidMandate: 'Those limits are invalid, or the agent already has a different owner.',
 };
 
-/** A readable reason for a failed call, including QoreSplit's own errors. */
+/** A readable reason for a failed call, including QorePact's own errors. */
 export function explainError(error) {
   if (error instanceof BaseError) {
     const revert = error.walk((cause) => cause instanceof ContractFunctionRevertedError);
@@ -235,8 +275,11 @@ async function checkNativeReceipt(reply, note, height) {
 
 export async function getAgreement(id) {
   const agreement = await read('getAgreement', [id]);
-  if (termsHash(agreement) !== agreement.termsHash) throw new Error('The agreement does not match its terms hash.');
-  return { ...agreement, state: Status[agreement.status] };
+  if (termsHash(agreement) !== agreement.termsHash) throw new Error('The pact does not match its terms hash.');
+  return {
+    ...agreement, state: Status[agreement.status], kindName: Kind[agreement.kind], service: isService(agreement),
+    budget: isService(agreement) ? budgetOf(agreement) : 0n,
+  };
 }
 
 /** Check an agreement's activation record on both VMs. */
@@ -282,7 +325,14 @@ export async function getStatement(account) {
     return { id, agreement, share: agreement.shares[index], credit, total: credit * agreement.sales };
   }));
   const fromAgreements = agreements.reduce((sum, row) => sum + row.total, 0n);
-  return { earned, withdrawn, available, nonce, agreements, consistent: fromAgreements === earned && earned - withdrawn === available };
+  const [clientOf, mandate, signer] = await Promise.all([
+    read('pactsAsClient', [account]), read('getMandate', [account]), read('withdrawalSigner', [account]),
+  ]);
+  return {
+    earned, withdrawn, available, nonce, agreements, clientOf, signer,
+    mandate: mandate.owner === zeroAddress ? undefined : mandate,
+    consistent: fromAgreements === earned && earned - withdrawn === available,
+  };
 }
 
 /** Withdrawals of `account`, from event logs. Public RPCs may limit log queries, so this can fail on its own. */
@@ -293,3 +343,35 @@ export async function getWithdrawals(account) {
 }
 
 export const parseRequest = (text) => parseSignedRequest(text, { chainId: chain.id, contract: address });
+
+/** A service pact's deliveries, from contract state. */
+export async function getDeliveries(id, count) {
+  const list = await Promise.all(Array.from({ length: Number(count) }, (_, unit) => read('getDelivery', [id, BigInt(unit)])));
+  return list.map((delivery, unit) => ({ ...delivery, unit: BigInt(unit), state: DeliveryStatus[delivery.status] }));
+}
+
+/** Payments of a service pact, from event logs, each checked against its Native receipt. Can fail if the RPC limits logs. */
+export async function getUnitPayments(id, agreement) {
+  const fromBlock = await read('deployBlock');
+  const logs = await client.getContractEvents({ address, abi, eventName: 'Paid', args: { id }, fromBlock });
+  return Promise.all(logs.map(async (log) => {
+    const delivery = await read('getDelivery', [id, log.args.unit]);
+    const commitment = deliveryCommitment({
+      chainId: chain.id, contract: address, id, unit: log.args.unit, deliverable: delivery.deliverable,
+      recipients: agreement.recipients, credits: log.args.credits,
+    });
+    const native = commitment === log.args.commitment
+      ? await checkNativeReceipt(log.args.nativeReply, deliveryNote(commitment), log.blockNumber)
+      : { nativeError: 'The payment does not match its commitment.' };
+    return { unit: log.args.unit, how: DeliveryStatus[log.args.how], hash: log.transactionHash, ...native };
+  }));
+}
+
+export async function getRefundable(id) {
+  return read('refundable', [id]);
+}
+
+/** The latest block time, for deadlines and review periods. */
+export async function chainTime() {
+  return (await client.getBlock()).timestamp;
+}

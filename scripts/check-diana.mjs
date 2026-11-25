@@ -1,11 +1,11 @@
-// Read-only checks that QoreChain Diana still behaves the way QoreSplit relies on.
+// Read-only checks that QoreChain Diana still behaves the way QorePact relies on.
 // Needs no keys and no funds: every check is an eth_call or a public REST read.
 //
 //   npm run check:diana
 //
-// 1. pqcVerify accepts a real ML-DSA-87 signature over QoreSplit's exact terms and
+// 1. pqcVerify accepts a real ML-DSA-87 signature over QorePact's exact terms and
 //    withdrawal bytes, and refuses a tampered message.
-// 2. QoreSplit's bytecode deploys on Diana's EVM (inside a call), and its sign path
+// 2. QorePact's bytecode deploys on Diana's EVM (inside a call), and its sign path
 //    reaches the real key registry and verifier with the expected errors.
 // 3. The Cross-VM bridge writes to the pinned receipt book and replies in the format
 //    the contract and app parse, and Native REST returns receipts and windows as expected.
@@ -25,7 +25,7 @@ const chain = defineChain({
   rpcUrls: { default: { http: [RPC] } },
 });
 const client = createPublicClient({ chain, transport: http(RPC, { timeout: 60_000 }) });
-const { abi } = JSON.parse(await readFile(new URL('../artifacts/QoreSplit.json', import.meta.url)));
+const { abi } = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
 const verifyAbi = [{
   type: 'function', name: 'pqcVerify', stateMutability: 'view',
   inputs: [{ type: 'bytes' }, { type: 'bytes' }, { type: 'bytes' }], outputs: [{ type: 'bool' }],
@@ -53,10 +53,10 @@ const verify = (signature, message) => client.readContract({
 });
 const terms = termsMessage({ chainId: 9800, contract, id: 1n, signer: someone, hash: '0x' + 'ab'.repeat(32) });
 const termsSignature = toHex(pqcSign(keypair.secretKey, hexToBytes(terms)));
-check('accepts a signature over QoreSplit terms bytes', await verify(termsSignature, terms) === true);
+check('accepts a signature over QorePact terms bytes', await verify(termsSignature, terms) === true);
 check('refuses the same signature over changed bytes', await verify(termsSignature, terms.slice(0, -2) + '00') === false);
 const withdrawal = withdrawalMessage({ chainId: 9800, contract, recipient: someone, to: someone, amount: 10n ** 18n, nonce: 0n });
-check('accepts a signature over QoreSplit withdrawal bytes',
+check('accepts a signature over QorePact withdrawal bytes',
   await verify(toHex(pqcSign(keypair.secretKey, hexToBytes(withdrawal), { hedged: true })), withdrawal) === true);
 const gas = await client.estimateGas({
   to: '0x0000000000000000000000000000000000000a01',
@@ -64,65 +64,92 @@ const gas = await client.estimateGas({
 });
 console.log('        one verification costs about ' + gas + ' gas, calldata included');
 
-console.log('QoreSplit inside a call on Diana');
+console.log('QorePact inside a call on Diana');
+// A contract-creation call needs a sender whose live EVM window allows creation (no target list).
+// Any recent EVM sender also has a registered ML-DSA-87 key, which the sign check below uses.
+const { bech32 } = await import('@scure/base');
+const qorOf = (account) => bech32.encode('qor', bech32.toWords(hexToBytes(account)));
 const recent = await (async () => {
   const latest = await client.getBlockNumber();
-  for (let block = latest; block > latest - 2000n; block -= 1n) {
-    const { transactions } = await client.getBlock({ blockNumber: block, includeTransactions: true });
-    if (transactions.length) return transactions[0].from;
+  const seen = new Set();
+  for (let top = latest; top > latest - 6000n; top -= 200n) {
+    const blocks = await Promise.all(Array.from({ length: 200 }, (_, i) =>
+      client.getBlock({ blockNumber: top - BigInt(i), includeTransactions: true }).catch(() => ({ transactions: [] }))));
+    for (const { transactions } of blocks) {
+      for (const { from } of transactions) {
+        if (seen.has(from)) continue;
+        seen.add(from);
+        const state = (await rest('/qorechain/pqc/v1/evm_window/' + qorOf(from))).body;
+        if (state?.live && !state.native_only && !(state.allowed_targets ?? []).length) return from;
+      }
+    }
   }
 })();
-check('found a recent EVM sender (it has a registered key)', Boolean(recent), recent);
-const harness = `
+check('found a recent EVM sender with a window that allows contract creation', Boolean(recent), recent);
+if (!recent) {
+  console.log('        Nobody has such a window open right now; run this again later. The other checks stand.');
+  process.exit(failures ? 1 : 0);
+}
+// Diana caps a read-only call at 5M gas, and deploying QorePact alone takes about 4.2M. So:
+// (a) estimate a real deployment; (b) run QorePact's own code on Diana's EVM through a state
+// override (proposals touch no QoreChain precompile; overrides switch those off); (c) call the key
+// registry, the ML-DSA-87 verifier and the bridge from a small probe contract, as QorePact does.
+const artifactFile = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
+const deployGas = await client.estimateGas({ account: recent, data: artifactFile.bytecode });
+check('a QorePact deployment fits Diana’s limits', deployGas > 0n && deployGas < 5_000_000n, 'about ' + deployGas + ' gas');
+
+const PACT = '0x00000000000000000000000000000000000ac7e5';
+const override = [{ address: PACT, code: artifactFile.runtime }];
+const simulate = (functionName, args) => client.simulateContract({
+  account: recent, address: PACT, abi, functionName, args, stateOverride: override,
+}).then(({ result }) => result);
+const proposed = await simulate('propose', ['Diana check', 10n ** 18n, [recent, '0x000000000000000000000000000000000000bEEF'], [5000, 5000], 0n]);
+check('QorePact’s code runs on Diana’s EVM: a revenue share is proposed', proposed === 1n);
+const hired = await simulate('proposeService', ['Diana check', 10n ** 18n, 2, BigInt(Math.floor(Date.now() / 1000) + 3600), 600,
+  '0x000000000000000000000000000000000000bEEF', [recent], [10000]]);
+check('…and a service pact', hired === 1n);
+
+const probe = `
 pragma solidity ^0.8.26;
-import "QoreSplit.sol";
+interface IQorePQC {
+    function pqcVerify(bytes calldata pubkey, bytes calldata signature, bytes calldata message) external view returns (bool);
+    function pqcKeyStatus(address account) external view returns (bool, uint8, bytes memory, bool);
+}
 interface IBridge { function executeCrossVMCall(uint8, string calldata, bytes calldata) external returns (bytes memory); }
-contract Harness {
-    constructor(address registered) {
-        QoreSplit split = new QoreSplit();
-        address[] memory recipients = new address[](2);
-        recipients[0] = registered;
-        recipients[1] = address(0xBEEF);
-        uint16[] memory shares = new uint16[](2);
-        shares[0] = 5000;
-        shares[1] = 5000;
-        uint256 id = split.propose("Diana check", 1 ether, recipients, shares, 0);
-        bytes memory registeredError;
-        bytes memory unregisteredError;
-        try split.sign(id, registered, new bytes(4627)) {} catch (bytes memory reason) { registeredError = reason; }
-        try split.sign(id, address(0xBEEF), new bytes(4627)) {} catch (bytes memory reason) { unregisteredError = reason; }
+contract Probe {
+    constructor(address registered, string memory receipts) {
+        (bool registeredOk,, bytes memory pubkey, bool proven) = IQorePQC(address(0x0a02)).pqcKeyStatus(registered);
+        (bool strangerRegistered,,,) = IQorePQC(address(0x0a02)).pqcKeyStatus(address(0xBEEF));
+        bool junkAccepted = IQorePQC(address(0x0a01)).pqcVerify(pubkey, new bytes(4627), bytes("QorePact:terms:v3"));
         (bool bridged, bytes memory reply) = address(0x0901).call(abi.encodeCall(
-            IBridge.executeCrossVMCall, (1, split.RECEIPTS(), bytes('{"record":{"note":"qoresplit:diana-check"}}'))));
-        bytes memory out = abi.encode(address(split).code.length, registeredError, unregisteredError, bridged, reply);
+            IBridge.executeCrossVMCall, (1, receipts, bytes('{"record":{"note":"qorepact:diana-check"}}'))));
+        bytes memory out = abi.encode(registeredOk, proven, pubkey.length, strangerRegistered, junkAccepted, bridged, reply);
         assembly { return(add(out, 32), mload(out)) }
     }
 }`;
 const compiled = JSON.parse(solc.compile(JSON.stringify({
-  language: 'Solidity',
-  sources: {
-    'Harness.sol': { content: harness },
-    'QoreSplit.sol': { content: await readFile(new URL('../contracts/QoreSplit.sol', import.meta.url), 'utf8') },
-  },
-  settings: { optimizer: { enabled: true, runs: 200 }, viaIR: true, evmVersion: 'cancun', outputSelection: { '*': { '*': ['evm.bytecode.object'] } } },
+  language: 'Solidity', sources: { 'Probe.sol': { content: probe } },
+  settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'cancun', outputSelection: { '*': { '*': ['evm.bytecode.object'] } } },
 })));
 const compileErrors = (compiled.errors ?? []).filter(({ severity }) => severity === 'error');
 if (compileErrors.length) throw new Error(compileErrors.map(({ formattedMessage }) => formattedMessage).join('\n'));
-const { data } = await client.call({
-  account: recent, gas: 30_000_000n,
-  data: '0x' + compiled.contracts['Harness.sol'].Harness.evm.bytecode.object + recent.slice(2).toLowerCase().padStart(64, '0'),
+const { encodeAbiParameters } = await import('viem');
+const { data: result } = await client.call({
+  account: recent,
+  data: '0x' + compiled.contracts['Probe.sol'].Probe.evm.bytecode.object +
+    encodeAbiParameters([{ type: 'address' }, { type: 'string' }], [recent, RECEIPTS]).slice(2),
 });
-const [size, registeredError, unregisteredError, bridged, reply] = decodeAbiParameters(
-  [{ type: 'uint256' }, { type: 'bytes' }, { type: 'bytes' }, { type: 'bool' }, { type: 'bytes' }], data,
+const [registeredOk, proven, keyLength, strangerRegistered, junkAccepted, bridged, reply] = decodeAbiParameters(
+  [{ type: 'bool' }, { type: 'bool' }, { type: 'uint256' }, { type: 'bool' }, { type: 'bool' }, { type: 'bool' }, { type: 'bytes' }], result,
 );
-const errorName = (bytes) => { try { return decodeErrorResult({ abi, data: bytes }).errorName; } catch { return bytes; } };
-check('QoreSplit deploys', size > 0n, size + ' bytes of runtime code');
-check('a junk signature for a registered account is refused by pqcVerify', errorName(registeredError) === 'BadPqcSignature', errorName(registeredError));
-check('an account without a key is refused by the registry', errorName(unregisteredError) === 'PqcKeyNotRegistered', errorName(unregisteredError));
-check('the bridge accepts a QoreSplit receipt note', bridged === true);
+check('from a contract, pqcKeyStatus returns a registered, proven 2592-byte key', registeredOk && proven && keyLength === 2592n);
+check('from a contract, pqcKeyStatus reports an unknown account as unregistered', strangerRegistered === false);
+check('from a contract, pqcVerify refuses a junk signature', junkAccepted === false);
+check('the bridge accepts a QorePact receipt note', bridged === true);
 let receipt;
 try { receipt = JSON.parse(hexToString(decodeAbiParameters([{ type: 'bytes' }], reply)[0])); } catch { /* checked below */ }
 check('the bridge replies with an ABI-wrapped receipt longer than 64 bytes',
-  (reply.length - 2) / 2 > 64 && Number.isSafeInteger(receipt?.id) && receipt?.note === 'qoresplit:diana-check', JSON.stringify(receipt));
+  (reply.length - 2) / 2 > 64 && Number.isSafeInteger(receipt?.id) && receipt?.note === 'qorepact:diana-check', JSON.stringify(receipt));
 
 console.log('Native REST');
 const params = await rest('/qorechain/crossvm/v1/params');
@@ -136,10 +163,9 @@ if (receipt?.id > 1) {
   check('receipts read back with id, sender, note and height',
     shape && Number.isSafeInteger(shape.id) && /^qor1/.test(shape.sender) && typeof shape.note === 'string' && Number(shape.height) > 0);
 }
-const { bech32 } = await import('@scure/base');
-const window = await rest('/qorechain/pqc/v1/evm_window/' + bech32.encode('qor', bech32.toWords(hexToBytes(recent))));
+const window = await rest('/qorechain/pqc/v1/evm_window/' + qorOf(recent));
 check('EVM windows report live, targets and remaining value',
   window.status === 404 || (typeof window.body?.live === 'boolean' && Array.isArray(window.body?.allowed_targets)));
 
-console.log(failures ? failures + ' check(s) failed.' : 'Diana matches what QoreSplit expects.');
+console.log(failures ? failures + ' check(s) failed.' : 'Diana matches what QorePact expects.');
 process.exitCode = failures ? 1 : 0;

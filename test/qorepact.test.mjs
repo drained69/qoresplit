@@ -8,10 +8,11 @@ import {
 } from 'viem';
 import { foundry } from 'viem/chains';
 import {
+  budgetOf, deliverableHash, deliveryCommitment, deliveryMessage, deliveryNote, mandateMessage, reviewMessage,
   agreementCommitment, parseSignedRequest, paymentCommitment, paymentId, paymentNote, requiredSigners,
   signedRequest, splitAmounts, termsHash, termsMessage, termsNote, withdrawalMessage,
 } from '../src/protocol.js';
-import { forgerFor, verifyLocally } from '../scripts/pqc.mjs';
+import { forgerFor, verifyLocally } from '../sdk/pqc.mjs';
 import { generatePqcKeypair, pqcSign } from '@qorechain/sdk';
 
 process.env.HARDHAT_CONFIG = new URL('./hardhat.config.cjs', import.meta.url).pathname;
@@ -22,7 +23,7 @@ const PQC_VERIFY = '0x0000000000000000000000000000000000000a01';
 const PQC_KEYS = '0x0000000000000000000000000000000000000a02';
 const RECEIPTS = 'qor1xjayq5ev55tkzpml9klxwyshr7gdrha0nurha9jhm0f0gdckksgs3gltw8';
 const CHAIN_ID = 31337;
-const { abi, bytecode, runtime } = JSON.parse(await readFile(new URL('../artifacts/QoreSplit.json', import.meta.url)));
+const { abi, bytecode, runtime } = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
 
 // Stand-ins for QoreChain's precompiles, which a local EVM does not have (the same
 // approach as the QoreChain workshop vault). A stand-in "signature" is valid when it
@@ -78,6 +79,8 @@ let publicClient;
 let wallet;
 let contract;
 let deployer, alice, bob, carol, dave, erin, payer, relayer, mallory;
+// Agents and their human owners, for service pacts and mandates.
+let buyer, owner, seller, helper, agentB;
 
 const pubkeyOf = (account) => keccak256(concatHex([toHex('pk'), account]));
 const mockSign = (pubkey, message) => keccak256(concatHex([toHex('ok'), pubkey, message]));
@@ -172,12 +175,12 @@ before(async () => {
   });
   publicClient = createPublicClient({ chain: foundry, transport });
   wallet = createWalletClient({ chain: foundry, transport });
-  [deployer, alice, bob, carol, dave, erin, payer, relayer, mallory] =
-    (await wallet.getAddresses()).map((account) => getAddress(account));
+  const all = (await wallet.getAddresses()).map((account) => getAddress(account));
+  [deployer, alice, bob, carol, dave, erin, payer, relayer, mallory, buyer, owner, seller, helper, agentB] = all;
   await setCode(PQC_VERIFY, compiled.PqcMock.evm.deployedBytecode.object);
   await setCode(PQC_KEYS, compiled.PqcMock.evm.deployedBytecode.object);
   await setCode(BRIDGE, compiled.BridgeMock.evm.deployedBytecode.object);
-  for (const account of [alice, bob, carol, dave]) await setKey(account);
+  for (const account of [alice, bob, carol, dave, buyer, owner, seller, helper, agentB]) await setKey(account);
   await setKey(erin, true, false);
   const hash = await wallet.deployContract({ account: deployer, abi, bytecode });
   const deployed = await publicClient.waitForTransactionReceipt({ hash });
@@ -461,12 +464,242 @@ test('real ML-DSA-87 signatures over the contract bytes verify, and only for the
 });
 
 test('signed requests carry exactly what the contract needs', () => {
-  const text = signedRequest({ chainId: CHAIN_ID, contract, action: 'withdraw', recipient: alice, to: bob, amount: 5n, signature: '0xabcd' });
-  assert.deepEqual(parseSignedRequest(text, { chainId: CHAIN_ID, contract }),
-    { action: 'withdraw', recipient: alice, to: bob, amount: 5n, signature: '0xabcd' });
+  const scope = { chainId: CHAIN_ID, contract };
+  const text = signedRequest('withdraw', { recipient: alice, to: bob, amount: 5n, signature: '0xabcd' }, scope);
+  const parsed = parseSignedRequest(text, scope);
+  assert.equal(parsed.action, 'withdraw');
+  assert.deepEqual(parsed.args, [alice, bob, 5n, '0xabcd']);
   assert.throws(() => parseSignedRequest(text, { chainId: 9800, contract }), /different chain/);
-  assert.throws(() => parseSignedRequest(text, { chainId: CHAIN_ID, contract: alice }), /different QoreSplit/);
-  const sign = signedRequest({ chainId: CHAIN_ID, contract, action: 'sign', id: 3n, signer: carol, signature: '0x01' });
-  assert.equal(parseSignedRequest(sign, { chainId: CHAIN_ID, contract }).id, 3n);
-  assert.throws(() => parseSignedRequest('{}', { chainId: CHAIN_ID, contract }), /not a QoreSplit/);
+  assert.throws(() => parseSignedRequest(text, { chainId: CHAIN_ID, contract: alice }), /different QorePact/);
+  const sign = signedRequest('sign', { id: 3n, signer: carol, signature: '0x01' }, scope);
+  assert.deepEqual(parseSignedRequest(sign, scope).args, [3n, carol, '0x01']);
+  const deliver = signedRequest('deliver', { id: 1n, provider: bob, deliverable: '0x' + '12'.repeat(32), signature: '0x01' }, scope);
+  assert.equal(parseSignedRequest(deliver, scope).label, 'Deliver work');
+  assert.throws(() => parseSignedRequest(deliver.replace('"0x' + '12'.repeat(32), '"0x12'), scope), /valid deliverable/);
+  assert.throws(() => parseSignedRequest('{}', scope), /not a QorePact/);
+  assert.throws(() => signedRequest('drain', {}, scope), /Unknown action/);
+});
+
+// ------------------------------------------------------------ service pacts
+
+const now = async () => (await publicClient.getBlock()).timestamp;
+async function advance(seconds) {
+  await publicClient.request({ method: 'evm_increaseTime', params: [Number(seconds)] });
+  await publicClient.request({ method: 'evm_mine', params: [] });
+}
+const UNIT = parseEther('2');
+
+async function proposeService(overrides = {}) {
+  const terms = {
+    title: 'Clean five datasets', price: UNIT, maxUnits: 5, deadline: (await now()) + 3600n, reviewPeriod: 600,
+    client: buyer, recipients: [seller, helper], shares: [8000, 2000], ...overrides,
+  };
+  const receipt = await sendOk(deployer, 'proposeService', [
+    terms.title, terms.price, terms.maxUnits, terms.deadline, terms.reviewPeriod, terms.client, terms.recipients, terms.shares,
+  ]);
+  return { id: eventNamed(receipt, 'Proposed').id, terms };
+}
+
+async function agreeService(overrides) {
+  const { id, terms } = await proposeService(overrides);
+  for (const signer of (await read('getAgreement', [id])).signers) await signTerms(id, signer);
+  return { id, terms };
+}
+
+async function deliverAs(provider, id, content, signer = provider) {
+  const deliverable = deliverableHash(content);
+  const { deliveries } = await read('getAgreement', [id]);
+  const message = await read('deliveryMessage', [id, BigInt(deliveries), provider, deliverable]);
+  const receipt = await sendOk(relayer, 'deliver', [id, provider, deliverable, signAs(signer, message)]);
+  return { unit: eventNamed(receipt, 'Delivered').unit, deliverable };
+}
+
+async function review(id, unit, accepted, signer = buyer) {
+  const message = await read('reviewMessage', [id, unit, accepted]);
+  return [id, unit, signAs(signer, message)];
+}
+
+test('a service pact locks the budget, pays accepted work, releases ignored work and refunds the rest', async () => {
+  const { id, terms } = await proposeService();
+  const agreement = await read('getAgreement', [id]);
+  assert.equal(agreement.kind, 1);
+  assert.deepEqual(agreement.signers, [seller, helper, buyer], 'providers and the client all sign');
+  assert.equal(agreement.termsHash, termsHash({ ...terms, kind: 1 }));
+  await reverts(payer, 'fund', [id], 'NotActive', budgetOf(terms));
+  await reverts(payer, 'checkout', [id, keccak256(stringToHex('not a shop'))], 'WrongKind', UNIT);
+  for (const signer of agreement.signers) await signTerms(id, signer);
+  assert.equal((await read('getAgreement', [id])).status, 2);
+
+  // Funding: exactly the budget, once.
+  await reverts(relayer, 'deliver', [id, seller, deliverableHash('x'), '0x00'], 'NotFunded');
+  await reverts(payer, 'fund', [id], 'IncorrectPayment', UNIT);
+  const funded = eventNamed(await sendOk(payer, 'fund', [id], parseEther('10')), 'Funded');
+  assert.equal(funded.amount, parseEther('10'));
+  await reverts(payer, 'fund', [id], 'AlreadyFunded', parseEther('10'));
+
+  // Delivery: only providers, only with their own post-quantum signature.
+  const content = 'dataset 1: 10,000 cleaned rows';
+  const message = await read('deliveryMessage', [id, 0n, seller, deliverableHash(content)]);
+  assert.equal(message, deliveryMessage({ chainId: CHAIN_ID, contract, id, unit: 0n, provider: seller, deliverable: deliverableHash(content) }));
+  await reverts(relayer, 'deliver', [id, mallory, deliverableHash(content), signAs(mallory, message)], 'NotAProvider');
+  await reverts(relayer, 'deliver', [id, seller, deliverableHash(content), signAs(helper, message)], 'BadPqcSignature');
+  await reverts(relayer, 'deliver', [id, seller, '0x' + '0'.repeat(64), signAs(seller, message)], 'InvalidTerms');
+  const first = await deliverAs(seller, id, content);
+  assert.equal(first.unit, 0n);
+  const stored = await read('getDelivery', [id, 0n]);
+  assert.deepEqual([stored.deliverable, stored.provider, stored.status], [first.deliverable, seller, 1]);
+
+  // Accepting pays one unit, split between the team, with a Native receipt.
+  const before = await Promise.all([seller, helper].map((account) => read('earned', [account])));
+  const acceptArgs = await review(id, 0n, true);
+  assert.equal(await read('reviewMessage', [id, 0n, true]),
+    reviewMessage({ chainId: CHAIN_ID, contract, id, unit: 0n, deliverable: first.deliverable, accepted: true }));
+  await reverts(relayer, 'accept', [id, 0n, signAs(seller, await read('reviewMessage', [id, 0n, true]))], 'BadPqcSignature');
+  await reverts(relayer, 'accept', [id, 0n, (await review(id, 0n, false))[2]], 'BadPqcSignature', undefined);
+  const accepted = await sendOk(relayer, 'accept', acceptArgs);
+  const payment = eventNamed(accepted, 'Paid');
+  assert.equal(payment.how, 2);
+  assert.deepEqual(payment.credits, [parseEther('1.6'), parseEther('0.4')]);
+  const commitment = deliveryCommitment({
+    chainId: CHAIN_ID, contract, id, unit: 0n, deliverable: first.deliverable, recipients: [seller, helper], credits: payment.credits,
+  });
+  assert.equal(payment.commitment, commitment);
+  const [record] = events(accepted, compiled.BridgeMock.abi, BRIDGE);
+  assert.deepEqual(JSON.parse(hexToString(record.args.payload)), { record: { note: deliveryNote(commitment) } });
+  const after = await Promise.all([seller, helper].map((account) => read('earned', [account])));
+  assert.deepEqual(after.map((value, i) => value - before[i]), payment.credits);
+  await reverts(relayer, 'accept', acceptArgs, 'DeliveryNotPending');
+
+  // Rejecting frees the unit, but only within the review period.
+  const second = await deliverAs(helper, id, 'dataset 2: half empty');
+  assert.equal(eventNamed(await sendOk(relayer, 'reject', await review(id, second.unit, false)), 'Rejected').unit, second.unit);
+  assert.equal((await read('getDelivery', [id, second.unit])).status, 3);
+  const third = await deliverAs(seller, id, 'dataset 2, fixed');
+  await reverts(mallory, 'release', [id, third.unit], 'ReviewPeriodNotOver');
+  await advance(601);
+  await reverts(relayer, 'reject', await review(id, third.unit, false), 'ReviewPeriodOver');
+  // The client went quiet: anyone releases the payment.
+  assert.equal(eventNamed(await sendOk(mallory, 'release', [id, third.unit]), 'Paid').how, 4);
+
+  // Units are capped by the budget.
+  for (let i = 0; i < 3; i++) await deliverAs(seller, id, 'dataset ' + (3 + i));
+  await reverts(relayer, 'deliver', [id, seller, deliverableHash('one too many'), '0x00'], 'NoUnitsLeft');
+  assert.equal(await read('refundable', [id]), 0n);
+
+  // After the deadline: no more deliveries; pending work stays reserved; the rest returns.
+  await sendOk(relayer, 'reject', await review(id, 5n, false));
+  await reverts(payer, 'refund', [id], 'DeadlineNotPassed');
+  await advance(3600);
+  await reverts(relayer, 'deliver', [id, seller, deliverableHash('late'), '0x00'], 'DeadlinePassed');
+  assert.equal(await read('refundable', [id]), UNIT);
+  const clientBefore = await publicClient.getBalance({ address: buyer });
+  const refunded = eventNamed(await sendOk(mallory, 'refund', [id]), 'Refunded');
+  assert.deepEqual([refunded.to, refunded.amount], [buyer, UNIT]);
+  assert.equal(await publicClient.getBalance({ address: buyer }), clientBefore + UNIT);
+  await reverts(mallory, 'refund', [id], 'NothingToRefund');
+  // Work delivered before the deadline can still be paid.
+  await sendOk(relayer, 'accept', await review(id, 4n, true));
+  await sendOk(mallory, 'release', [id, 3n]);
+  const final = await read('getAgreement', [id]);
+  assert.deepEqual([final.sales, final.pendingUnits, final.refunded], [4n, 0, UNIT]);
+  assert.ok((await read('agreementsOf', [helper])).includes(id));
+  assert.ok((await read('pactsAsClient', [buyer])).includes(id));
+});
+
+test('service terms are validated', async () => {
+  const t = (await now()) + 3600n;
+  const bad = [
+    ['Job', UNIT, 0, t, 600, buyer, [seller], [10000]],
+    ['Job', UNIT, 1001, t, 600, buyer, [seller], [10000]],
+    ['Job', UNIT, 1, (await now()) - 1n, 600, buyer, [seller], [10000]],
+    ['Job', UNIT, 1, t, 59, buyer, [seller], [10000]],
+    ['Job', UNIT, 1, t, 30 * 86400 + 1, buyer, [seller], [10000]],
+    ['Job', UNIT, 1, t, 600, seller, [seller], [10000]],
+    ['Job', UNIT, 1, t, 600, '0x0000000000000000000000000000000000000000', [seller], [10000]],
+    ['Job', UNIT, 1, t, 600, buyer, [], []],
+  ];
+  for (const args of bad) await reverts(deployer, 'proposeService', args, 'InvalidTerms');
+  const { id } = await proposeService({ recipients: [seller], shares: [10000] });
+  assert.equal((await read('getAgreement', [id])).signers.length, 2, 'a single provider is allowed');
+});
+
+test('an owner limits what its agent can commit, can switch it off, and then controls its money', async () => {
+  const expiry = (await now()) + 86400n;
+  const limits = [parseEther('10'), parseEther('15'), expiry];
+  const message = await read('mandateMessage', [buyer, owner, ...limits]);
+  assert.equal(message, mandateMessage({ chainId: CHAIN_ID, contract, agent: buyer, owner, maxPerPact: limits[0], maxTotal: limits[1], expiry, nonce: 0n }));
+  await reverts(relayer, 'setMandate', [buyer, owner, ...limits, signAs(mallory, message), signAs(owner, message)], 'BadPqcSignature');
+  await reverts(relayer, 'setMandate', [buyer, owner, ...limits, signAs(buyer, message), signAs(mallory, message)], 'BadPqcSignature');
+  await reverts(relayer, 'setMandate', [buyer, buyer, ...limits, signAs(buyer, message), signAs(buyer, message)], 'InvalidMandate');
+  await reverts(relayer, 'setMandate', [buyer, owner, parseEther('20'), parseEther('15'), expiry, '0x', '0x'], 'InvalidMandate');
+  const set = eventNamed(await sendOk(relayer, 'setMandate', [buyer, owner, ...limits, signAs(buyer, message), signAs(owner, message)]), 'MandateSet');
+  assert.deepEqual([set.agent, set.owner, set.maxTotal], [buyer, owner, parseEther('15')]);
+  await reverts(relayer, 'setMandate', [buyer, owner, ...limits, signAs(buyer, message), signAs(owner, message)], 'BadPqcSignature');
+  const stolen = await read('mandateMessage', [buyer, mallory, ...limits]);
+  await reverts(relayer, 'setMandate', [buyer, mallory, ...limits, signAs(buyer, stolen), signAs(mallory, stolen)], 'InvalidMandate');
+
+  // Over the per-pact limit: the agent cannot even agree.
+  const big = await proposeService({ maxUnits: 6 });
+  for (const signer of [seller, helper]) await signTerms(big.id, signer);
+  await reverts(relayer, 'sign', [big.id, buyer, signAs(buyer, await read('termsMessage', [big.id, buyer]))], 'MandateLimitExceeded');
+  // Within limits: agreed and funded; the commitment counts against the total.
+  const { id } = await agreeService();
+  await sendOk(payer, 'fund', [id], parseEther('10'));
+  assert.equal((await read('getMandate', [buyer])).committed, parseEther('10'));
+  const second = await proposeService({ maxUnits: 4 });
+  for (const signer of [seller, helper]) await signTerms(second.id, signer);
+  await reverts(relayer, 'sign', [second.id, buyer, signAs(buyer, await read('termsMessage', [second.id, buyer]))], 'MandateLimitExceeded');
+
+  // The owner raises the limit; the agent must agree again.
+  const raised = [parseEther('10'), parseEther('30'), expiry];
+  const raiseMessage = await read('mandateMessage', [buyer, owner, ...raised]);
+  await sendOk(relayer, 'setMandate', [buyer, owner, ...raised, signAs(buyer, raiseMessage), signAs(owner, raiseMessage)]);
+  await signTerms(second.id, buyer);
+  assert.equal((await read('getAgreement', [second.id])).status, 2);
+
+  // The agent earns something as a provider in another pact.
+  const { id: job } = await agreeService({ client: agentB, recipients: [buyer], shares: [10000], maxUnits: 1 });
+  await sendOk(payer, 'fund', [job], UNIT);
+  const { unit } = await deliverAs(buyer, job, 'summary');
+  await sendOk(relayer, 'accept', await review(job, unit, true, agentB));
+  assert.equal(await read('claimable', [buyer]), UNIT);
+
+  // Switch it off.
+  const revoke = await read('revokeMessage', [buyer]);
+  await reverts(relayer, 'revokeMandate', [buyer, signAs(buyer, revoke)], 'BadPqcSignature');
+  await sendOk(relayer, 'revokeMandate', [buyer, signAs(owner, revoke)]);
+  assert.equal(await read('canAct', [buyer]), false);
+  await reverts(relayer, 'revokeMandate', [buyer, signAs(owner, await read('revokeMessage', [buyer]))], 'InvalidMandate');
+  const { unit: pendingUnit } = await deliverAs(seller, id, 'delivered to a switched-off agent');
+  await reverts(relayer, 'accept', await review(id, pendingUnit, true), 'AgentNotAuthorized');
+  const fresh = await proposeService();
+  await reverts(relayer, 'sign', [fresh.id, buyer, signAs(buyer, await read('termsMessage', [fresh.id, buyer]))], 'AgentNotAuthorized');
+
+  // Only the owner can move the agent's earnings now.
+  assert.equal(await read('withdrawalSigner', [buyer]), owner);
+  const ownByAgent = await signWithdrawal(buyer, buyer, UNIT);
+  await reverts(relayer, 'withdraw', [buyer, buyer, UNIT, ownByAgent], 'BadPqcSignature');
+  const ownerBalance = await publicClient.getBalance({ address: owner });
+  await sendOk(relayer, 'withdraw', [buyer, owner, UNIT, await signWithdrawal(buyer, owner, UNIT, owner)]);
+  assert.equal(await publicClient.getBalance({ address: owner }), ownerBalance + UNIT);
+
+  // Unused budget goes back to the owner, and frees the commitment.
+  await advance(3601);
+  await sendOk(mallory, 'release', [id, pendingUnit]);
+  const refund = eventNamed(await sendOk(mallory, 'refund', [id]), 'Refunded');
+  assert.deepEqual([refund.to, refund.amount], [owner, parseEther('8')]);
+  assert.equal((await read('getMandate', [buyer])).committed, parseEther('2'));
+});
+
+test('an expired mandate stops the agent like a revocation', async () => {
+  const expiry = (await now()) + 120n;
+  const limits = [UNIT, UNIT, expiry];
+  const message = await read('mandateMessage', [agentB, owner, ...limits]);
+  await sendOk(relayer, 'setMandate', [agentB, owner, ...limits, signAs(agentB, message), signAs(owner, message)]);
+  assert.equal(await read('canAct', [agentB]), true);
+  await advance(121);
+  assert.equal(await read('canAct', [agentB]), false);
+  assert.equal(await read('withdrawalSigner', [agentB]), owner);
+  const { id } = await proposeService({ client: agentB, maxUnits: 1 });
+  await reverts(relayer, 'sign', [id, agentB, signAs(agentB, await read('termsMessage', [id, agentB]))], 'AgentNotAuthorized');
 });

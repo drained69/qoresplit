@@ -120,7 +120,7 @@ p code, label code { white-space: nowrap; }
 .command .secondary { min-height: 34px; padding: 6px 11px; }
 .signers li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: center; padding-block: 11px; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .signers li:last-child { border-bottom: 0; padding-bottom: 0; }
-.signers li > span:last-child { overflow-wrap: anywhere; }
+.signers li > span:nth-child(2) { overflow-wrap: anywhere; min-width: 0; }
 .signers small { margin-top: 3px; }
 .check { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1.5px dashed #b9bfd3; color: #fff; font-size: .8rem; font-weight: 800; }
 .signed .check { border: 0; background: #2f8a63; }
@@ -138,7 +138,26 @@ td small { margin-top: 3px; }
 .history li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-block: 10px; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .history li:last-child { border-bottom: 0; }
 .intro p a { color: var(--blue); }
+/* QorePact additions */
+.eyebrow { margin: 0 0 8px; color: var(--blue); font-weight: 700; font-size: .85rem; letter-spacing: .02em; text-transform: uppercase; }
+.intro p.eyebrow { margin-top: 0; }
+.lede { color: var(--muted); font-size: .92rem; line-height: 1.5; margin: -8px 0 18px; }
+.tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+.tabs a { padding: 8px 14px; border-radius: 8px; text-decoration: none; font-weight: 650; font-size: .9rem; color: var(--muted); }
+.tabs a[aria-current] { background: #eeedff; color: var(--blue); box-shadow: none; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.with-action { display: flex; gap: 10px; align-items: center; }
+.with-action .text-button { white-space: nowrap; }
+.budget { margin: 0 0 14px; font-size: .88rem; line-height: 1.5; }
+.budget a { color: var(--blue); }
+.small { min-height: 32px; padding: 5px 10px; font-size: .8rem; }
+.small-link { font-size: .82rem; color: var(--blue); text-decoration: none; font-weight: 650; }
+.signers li { grid-template-columns: 26px minmax(0, 1fr) auto; }
+.compact { padding: 16px 24px; }
+.compact dd { margin-bottom: 0; }
+#payments h3 { margin: 18px 0 4px; }
 @media (max-width: 750px) {
+  .grid-2 { grid-template-columns: 1fr; }
   .shell { width: calc(100% - 36px); }
   .top-inner { flex-wrap: wrap; gap: 6px 12px; padding-top: 10px; }
   nav { order: 1; width: 100%; gap: 18px; overflow-x: auto; }
