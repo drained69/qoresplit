@@ -7,7 +7,9 @@
     "build": "npm run compile && vite build && node scripts/build-worker.mjs",
     "preview": "vite preview",
     "compile": "node scripts/compile.mjs",
-    "test": "npm run compile && node --test test/*.test.mjs",
+    "test": "npm run compile && node --test test/qoresplit.test.mjs test/native.test.mjs",
+    "e2e": "npm run compile && node --test test/e2e.test.mjs",
+    "check:diana": "npm run compile --silent && node scripts/check-diana.mjs",
     "deploy": "npm run compile && node --env-file-if-exists=.env scripts/deploy.mjs",
     "pq": "npm run compile --silent && node --env-file-if-exists=.env scripts/qoresplit.mjs"
   },

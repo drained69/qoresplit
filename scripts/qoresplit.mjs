@@ -16,7 +16,9 @@ import {
   getAddress, http, isAddress, parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { Status, signedRequest, splitAmounts, termsHash, termsMessage, withdrawalMessage } from '../src/protocol.js';
+import {
+  Status, signedRequest, splitAmounts, termsHash, termsMessage, windowProblem, withdrawalMessage,
+} from '../src/protocol.js';
 import { forgerFor, loadSigner, registeredKey } from './pqc.mjs';
 
 const RPC = process.env.QORE_EVM_RPC?.trim() || 'https://evm-testnet.qore.host';
@@ -81,15 +83,21 @@ async function requireMatchingKey(signer) {
   }
 }
 
-async function windowNote(signer) {
+/** Stop early, with the reason, when the account's EVM window would refuse the transaction. */
+async function requireWindow(signer, contract) {
+  let response;
   try {
-    const response = await fetch(REST + '/qorechain/pqc/v1/evm_window/' + signer.qorAddress, { signal: AbortSignal.timeout(10_000) });
-    const body = response.ok ? await response.json() : undefined;
-    const state = body?.window ?? body?.evm_window ?? body;
-    if (state?.live === false || response.status === 404) {
-      console.log('  note: no live EVM window for ' + signer.qorAddress + '. Open one before sending, or use --out.');
-    }
-  } catch { /* The send itself reports a closed window. */ }
+    response = await fetch(REST + '/qorechain/pqc/v1/evm_window/' + signer.qorAddress, { signal: AbortSignal.timeout(10_000) });
+  } catch {
+    return; // The send itself reports a refused window.
+  }
+  if (!response.ok && response.status !== 404) return;
+  const body = response.ok ? await response.json() : { found: false };
+  const problem = windowProblem(body.window ?? body.evm_window ?? body, { contract });
+  if (problem) {
+    throw new Error(signer.qorAddress + ' ' + problem + '. Open one that allows ' + contract +
+      ', or add --out request.json and submit it from any wallet in the app.');
+  }
 }
 
 async function submit(contract, signer, functionName, functionArgs, request) {
@@ -98,7 +106,7 @@ async function submit(contract, signer, functionName, functionArgs, request) {
     console.log('Saved the signed request to ' + flags.out + '. Paste it into "Submit a signature" in the app; any wallet can send it.');
     return;
   }
-  await windowNote(signer);
+  await requireWindow(signer, contract);
   const account = privateKeyToAccount(signer.privateKey);
   const { request: prepared } = await client.simulateContract({ account, address: contract, abi, functionName, args: functionArgs });
   const wallet = createWalletClient({ account, chain, transport: http(RPC) });

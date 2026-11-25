@@ -5,7 +5,7 @@ import {
 import { bech32 } from '@scure/base';
 import artifact from '../artifacts/QoreSplit.json';
 import {
-  MAX_RECIPIENTS, Status, WEI_PER_UQOR, agreementCommitment, parseSignedRequest, paymentCommitment, paymentNote,
+  MAX_RECIPIENTS, Status, WEI_PER_UQOR, agreementCommitment, windowProblem, parseSignedRequest, paymentCommitment, paymentNote,
   splitAmounts, termsHash, termsNote,
 } from './protocol.js';
 
@@ -121,24 +121,22 @@ export async function read(functionName, args = []) {
   return client.readContract({ address, abi, functionName, args });
 }
 
-export async function checkWindow(account) {
-  const qorAddress = bech32.encode('qor', bech32.toWords(hexToBytes(account)));
-  const response = await fetch('/api/native/windows/' + qorAddress, {
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (response.status === 404) return { active: false, qorAddress };
-  if (!response.ok) throw new Error('Could not read the EVM window.');
-  const result = await response.json();
-  const windowState = result.window ?? result.evm_window ?? result;
-  if (result.found === false) return { active: false, qorAddress };
-  return {
-    active: typeof windowState.live === 'boolean' ? windowState.live : undefined,
-    qorAddress,
-  };
+/** The account's Diana EVM window, and why it would refuse a call to QoreSplit carrying `valueWei`. */
+export async function checkWindow(account, valueWei = 0n) {
+  const qorAddress = qorAddressOf(account);
+  const response = await fetch('/api/native/windows/' + qorAddress, { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok && response.status !== 404) throw new Error('Could not read the EVM window.');
+  const result = response.ok ? await response.json() : { found: false };
+  const state = result.window ?? result.evm_window ?? result;
+  const problem = address ? windowProblem(state, { contract: address, valueWei }) : undefined;
+  return { active: state.live === true && result.found !== false, problem, qorAddress };
 }
 
 export async function transact(provider, account, functionName, args = [], value, onHash) {
   await assertDeployment();
+  // A refused window is reported before the wallet prompt. If the window cannot be read, the send decides.
+  const window = await checkWindow(account, value ?? 0n).catch(() => undefined);
+  if (window?.problem) throw new Error(window.qorAddress + ' ' + window.problem + '. Open a Diana EVM window that allows it, then retry.');
   await switchToDiana(provider);
   const wallet = createWalletClient({ chain, transport: custom(provider) });
   const { request } = await client.simulateContract({ account, address, abi, functionName, args, value });

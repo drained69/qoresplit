@@ -12,7 +12,7 @@ if (!/^0x[\da-f]{64}$/i.test(key ?? '')) {
 }
 const chain = defineChain({
   id: 9800, name: 'QoreChain Diana', nativeCurrency: { name: 'Test QOR', symbol: 'QOR', decimals: 18 },
-  rpcUrls: { default: { http: ['https://evm-testnet.qore.host'] } },
+  rpcUrls: { default: { http: [process.env.QORE_EVM_RPC?.trim() || 'https://evm-testnet.qore.host'] } },
 });
 const artifact = JSON.parse(await readFile(new URL('../artifacts/QoreSplit.json', import.meta.url)));
 const account = privateKeyToAccount(key);

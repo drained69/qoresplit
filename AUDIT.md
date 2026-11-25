@@ -15,7 +15,16 @@ Scope: agreement proposals, ML-DSA-87 consent, amendments, post-quantum withdraw
 | A pasted signed request could target another chain or deployment. | The app checks the chain ID and contract before relaying; the contract checks the signature regardless of who sends it. |
 | Pending proposals could clutter a collaborator's statement. | Statements list only agreements that went live. |
 
-The contract tests run on stand-ins for `pqcVerify` and `pqcKeyStatus`, because no local EVM has QoreChain's precompiles. A separate test signs the contract's exact message bytes with real ML-DSA-87 keys from `@qorechain/sdk` and verifies them. The real precompiles run only on Diana, so a mined end-to-end run there remains a release check.
+The contract tests run on stand-ins for `pqcVerify` and `pqcKeyStatus`, because no local EVM has QoreChain's precompiles. `npm run e2e` closes most of that gap: its stand-in accepts a signature only after verifying it with real ML-DSA-87, and it drives the real deploy script, signing tool and web app.
+
+Live read-only checks on Diana (`npm run check:diana`, last run 25 November 2026) confirmed:
+
+- `pqcVerify` accepts deterministic and hedged ML-DSA-87 signatures from `@qorechain/sdk` over QoreSplit's exact terms and withdrawal bytes, and refuses a changed message. One verification costs about 315,000 gas including calldata.
+- `pqcKeyStatus` returns a registered account's 2592-byte key with its proof-of-possession flag, in the ABI the contract decodes.
+- QoreSplit deploys inside a call. Its `sign` reaches the real registry and verifier: `BadPqcSignature` for a junk signature from a registered account, `PqcKeyNotRegistered` for an account without a key.
+- The bridge writes QoreSplit's note to the pinned receipt book (code 865) and returns ABI-wrapped JSON longer than 64 bytes. Native REST returns receipts with `id`, `sender`, `note` and `height`, and EVM windows with `live`, `allowed_targets` and remaining limits.
+
+Windows on Diana can be limited to specific contracts, transaction counts and value. The app and the signing tool now name the rule that would refuse a transaction before anything is signed or sent. A mined end-to-end run with funded Diana accounts remains a release check.
 
 `npm audit --omit=dev` reports zero advisories. Hardhat 2, used only to run the tests, carries advisories in its own development dependencies; it is not part of the app, the Worker or the signing tool.
 

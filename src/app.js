@@ -566,9 +566,9 @@ walletButton.onclick = () => void run(async (route) => {
   else {
     const state = await checkWindow(signer).catch(() => undefined);
     if (location.href !== route) return;
-    alert(state?.active === false
-      ? 'Wallet connected. Open a Diana EVM window for ' + state.qorAddress + ' before sending.'
-      : 'Wallet connected · ' + signer, 'success');
+    alert(state?.problem
+      ? 'Wallet connected, but ' + state.qorAddress + ' ' + state.problem + '. Open one before sending.'
+      : 'Wallet connected · ' + signer, state?.problem ? 'info' : 'success');
   }
 });
 window.addEventListener('hashchange', render);

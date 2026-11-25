@@ -61,7 +61,7 @@ Browser wallets cannot make ML-DSA-87 signatures over arbitrary bytes yet: QoreX
 | `npm run pq -- statement [0x…]` | Earnings, withdrawals and agreements of an address |
 | `npm run pq -- attack [QOR]` | Demo: your classical key alone tries to withdraw with a forged post-quantum signature. Simulated; nothing is sent |
 
-By default the tool sends the transaction from the same account, which needs an open EVM window. `--out file.json` saves a signed request instead. Paste it into *Submit a signature* in the app, and any connected wallet can send it: the contract only cares about the ML-DSA-87 signature. `--yes` skips the confirmation.
+By default the tool sends the transaction from the same account, which needs an open EVM window that allows the QoreSplit contract (windows can be limited to specific contracts, a number of transactions, and a value). The tool and the app explain which rule would refuse a transaction before anything is signed or sent. `--out file.json` saves a signed request instead. Paste it into *Submit a signature* in the app, and any connected wallet can send it: the contract only cares about the ML-DSA-87 signature. `--yes` skips the confirmation.
 
 ## Demo script (3 minutes)
 
@@ -86,4 +86,14 @@ The bridge target is the workshop's [governance-approved Native receipt book](ht
 
 ## Verification
 
-`npm test` deploys QoreSplit to an in-process EVM with stand-ins for the bridge and the two post-quantum precompiles, as the QoreChain workshop tests do. It covers consent before payment, signature binding, unregistered and unproven keys, amendments that need every old and new collaborator, stale competing amendments, cancellation, the stolen-key attack, relayed withdrawals and replay, exact rounding, receipt commitments, Native rollback, and invalid terms. One test signs the contract's exact bytes with real ML-DSA-87 keys from `@qorechain/sdk`. See [AUDIT.md](AUDIT.md) for the release review and its limits.
+Three levels, from fastest to closest to the real chain:
+
+| Command | What it proves | Needs |
+| --- | --- | --- |
+| `npm test` | Contract rules on an in-process EVM, with stand-ins for the bridge and the two post-quantum precompiles: consent before payment, signature binding, unregistered and unproven keys, amendments that need every old and new collaborator, stale competing amendments, cancellation, the stolen-key attack, relayed withdrawals and replay, rounding, receipt commitments, Native rollback, and invalid terms. One test signs the contract's exact bytes with real ML-DSA-87 keys. | Nothing |
+| `npm run e2e` | The whole product, end to end, on a local Diana stand-in (chain ID 9800). It runs the real deploy script and the real signing tool as separate processes with real ML-DSA-87 keys from fresh mnemonics. The stand-in verifies every signature with real ML-DSA-87 before its `pqcVerify` accepts it, so forged signatures fail as they would on Diana, and it keeps a receipt book with Diana's reply and REST formats. A real browser then proposes, relays signatures, pays, checks that receipts verify on both VMs, withdraws, follows a replaced link, proposes a change, and checks phone layouts. | Playwright for the browser part (`npm i -D playwright && npx playwright install chromium`); without it that part is skipped |
+| `npm run check:diana` | Diana itself, read-only: `pqcVerify` accepts real ML-DSA-87 signatures over QoreSplit's exact terms and withdrawal bytes and refuses tampered ones; QoreSplit deploys inside a call and its sign path reaches the real key registry and verifier; the bridge writes to the pinned receipt book and replies in the format the contract parses; Native REST returns receipts and windows as the app expects. | Network access to Diana. No keys, no funds |
+
+On a network that requires an HTTPS proxy, run the Node scripts with `NODE_USE_ENV_PROXY=1` (Node 22.21 or later) so `fetch` uses it.
+
+What none of them can do without funded accounts is mine a real agreement on Diana. Before a live demo, rehearse once with the collaborators' real accounts: deploy, sign, pay, withdraw. See [AUDIT.md](AUDIT.md) for the release review.

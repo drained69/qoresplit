@@ -1,4 +1,5 @@
-export const NATIVE_REST = 'https://api-testnet.qore.host';
+// QORE_NATIVE_REST is only for local rehearsals; hosted Workers always use Diana.
+export const NATIVE_REST = globalThis.process?.env?.QORE_NATIVE_REST?.trim() || 'https://api-testnet.qore.host';
 export const RECEIPTS = 'qor1xjayq5ev55tkzpml9klxwyshr7gdrha0nurha9jhm0f0gdckksgs3gltw8';
 
 export async function nativeRead(request, fetchImpl = fetch) {

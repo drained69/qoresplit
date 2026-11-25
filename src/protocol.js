@@ -119,3 +119,20 @@ export function parseSignedRequest(text, { chainId, contract }) {
   }
   throw new Error('Unknown signed request action.');
 }
+
+/**
+ * Why a Diana EVM window (as /qorechain/pqc/v1/evm_window returns it) would refuse a
+ * transaction to `contract` carrying `valueWei`, or undefined when it allows it.
+ * Windows can limit targets, transaction count and value (in uqor).
+ */
+export function windowProblem(state, { contract, valueWei = 0n }) {
+  if (!state || state.found === false || state.live !== true) return 'has no live EVM window';
+  if (state.native_only) return 'has a window for Native transactions only';
+  const targets = (state.allowed_targets ?? []).map((target) => String(target).toLowerCase());
+  if (targets.length && !targets.includes(contract.toLowerCase())) return 'has an EVM window that does not allow QoreSplit at ' + contract;
+  if (state.remaining_txs !== undefined && BigInt(state.remaining_txs) < 1n) return 'has used every transaction its EVM window allows';
+  const needed = (BigInt(valueWei) + WEI_PER_UQOR - 1n) / WEI_PER_UQOR;
+  if (needed && state.remaining_value !== undefined && BigInt(state.remaining_value) < needed) {
+    return 'has an EVM window with less value left than this payment';
+  }
+}
