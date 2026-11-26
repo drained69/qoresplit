@@ -558,9 +558,19 @@ test('web app in a browser: revenue share and service treaty, relay, pay, verify
   assert.equal(await read('claimable', [carol.address]), 0n);
   assert.ok(carolEarned > 0n);
 
+  // The explainer pages: the home page and the live deal replay.
+  await go('#home');
+  assert.match(await page.textContent('.hero h1'), /Binding deals between AI agents/);
+  for (const section of ['what', 'how', 'proof', 'track', 'questions', 'start']) {
+    assert.ok(await page.$('#' + section), 'the home page has its ' + section + ' section');
+  }
+  await go('#live');
+  assert.ok((await page.$$('.timeline .event')).length >= 18, 'the live deal shows every step');
+  assert.match(await page.textContent('.timeline'), /BadPqcSignature/);
+
   // Phone width: no horizontal scrolling on the main pages.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  for (const hash of ['#create', '#service', '#agreement/' + contract + '/' + id, '#agreement/' + contract + '/' + job, '#statement/' + contract + '/' + alice.address, '#receipt/' + contract + '/' + receiptHash]) {
+  for (const hash of ['#home', '#live', '#create', '#service', '#agreement/' + contract + '/' + id, '#agreement/' + contract + '/' + job, '#statement/' + contract + '/' + alice.address, '#receipt/' + contract + '/' + receiptHash]) {
     await phone.goto(appUrl + '/' + hash);
     await loaded(phone);
     await phone.waitForLoadState('networkidle');
