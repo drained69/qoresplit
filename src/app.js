@@ -7,6 +7,7 @@ import {
 } from './chain.js';
 import { MAX_PARTIES, deliverableHash } from './protocol.js';
 import { qorexAvailable, signWithQorex } from './qorex.js';
+import { homeHtml, liveFacts, liveHtml, liveParties, liveStateHtml } from './story.js';
 
 const content = document.querySelector('#content');
 const status = document.querySelector('#status');
@@ -795,17 +796,53 @@ async function receiptPage(hash, revision) {
   bindCopy();
 }
 
+/** The home page: what Treaty is. `#home/<section>` scrolls to a section. */
+function homePage(section) {
+  content.className = '';
+  content.innerHTML = homeHtml();
+  const target = section && document.getElementById(section);
+  if (target) target.scrollIntoView();
+  else window.scrollTo(0, 0);
+}
+
+/** The live deal: the real run on Diana, and Treaty #1's state read from the chain now. */
+async function livePage(revision) {
+  content.className = '';
+  content.innerHTML = liveHtml();
+  window.scrollTo(0, 0);
+  if (!address || !same(address, liveFacts.contract)) return;
+  try {
+    const agreement = await getAgreement(1n);
+    const [deliveries, mandate, data, cleaner] = await Promise.all([
+      getDeliveries(1n, agreement.deliveries), read('getMandate', [liveParties['Research agent']]),
+      read('earned', [liveParties['Data agent']]), read('earned', [liveParties['Cleaning agent']]),
+    ]);
+    if (revision !== rendering) return;
+    const state = (verified) => liveStateHtml({
+      agreement: { ...agreement, refundedQor: formatEther(agreement.refunded) }, deliveries, mandate, verified,
+      earned: { data: formatEther(data), cleaner: formatEther(cleaner) },
+    });
+    document.querySelector('#live-state').innerHTML = state(false);
+    const check = await verifyAgreement(1n, agreement);
+    if (revision === rendering) document.querySelector('#live-state').innerHTML = state(Boolean(check.native));
+  } catch { /* The recorded run above stands on its own. */ }
+}
+
 async function render() {
   const revision = ++rendering;
-  const [route, deployment, parameter, extra] = (location.hash.slice(1) || 'create').split('/');
+  const [route, deployment, parameter, extra] = (location.hash.slice(1) || 'home').split('/');
   alert('');
-  const section = { agreement: 'create', pay: 'create', service: 'create', statement: 'earnings', receipt: 'verify' }[route] ?? route;
+  const section = route === 'home' ? (deployment === 'how' ? 'how' : '') :
+    ({ agreement: 'create', pay: 'create', service: 'create', statement: 'earnings', receipt: 'verify' }[route] ?? route);
+  content.className = 'shell page';
   for (const link of document.querySelectorAll('[data-route]')) {
     if (link.dataset.route === section) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
   try {
-    if (route === 'create' && deployment === undefined) await createPage(undefined, revision);
+    if (route === 'home') homePage(deployment);
+    else if (route === 'live') await livePage(revision);
+    else if (route === 'create' && deployment === undefined) await createPage(undefined, revision);
     else if (route === 'service') servicePage();
     else if (route === 'verify') verifyPage();
     else if (route === 'earnings') earningsPage();
@@ -829,7 +866,7 @@ async function render() {
     if (revision !== rendering) return;
     flash = undefined;
     content.innerHTML = '<div class="intro"><h1>Unable to load this page</h1><p>' +
-      escape(errorMessage(error)) + '</p><a class="secondary" href="#create">Back to Treaty</a></div>';
+      escape(errorMessage(error)) + '</p><a class="secondary" href="#home">Back to Treaty</a></div>';
   }
 }
 
