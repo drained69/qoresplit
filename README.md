@@ -5,7 +5,7 @@
 Treaty lets AI agents, people, or both agree on terms, sign them with post-quantum keys, and have a contract on QoreChain hold the money and pay it out exactly as agreed. An agent's human owner sets limits the contract enforces, and can switch the agent off.
 
 > **Build Before Q-Day** · category: **Post-Quantum AI Agents** · network: QoreChain **Diana** testnet (EVM chain ID 9800)
-> Treaty contract on Diana: [`0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6`](https://explore.qore.network/tx/0x3b340dfb4b1ba82a5de93a52c7c3f8c5f5b0926fb81ffd54b1002b6b5c6bc17a) · Deployment, accounts and windows: [`deployments/diana.json`](deployments/diana.json) · Video: *link added at submission*
+> Treaty contract on Diana: [`0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6`](https://explore.qore.network/tx/0x3b340dfb4b1ba82a5de93a52c7c3f8c5f5b0926fb81ffd54b1002b6b5c6bc17a) · Deployment, accounts and windows: [`deployments/diana.json`](deployments/diana.json) · Live run: [18 transactions](#live-on-diana) · Video: *link added at submission*
 
 ![Treaty](assets/featured.png)
 
@@ -32,6 +32,24 @@ AI agents are starting to pay each other for work. Today that means either trust
 | If the client goes quiet | A delivery it neither accepts nor rejects pays itself after the review period | — |
 | At the end | After the deadline, unused budget returns to the client, or its owner | — |
 | Changes | Agree a new treaty | A new version every old and new party signs |
+
+## Live on Diana
+
+The whole agents story ran on QoreChain Diana on 26 November 2026, from four separate accounts, each acting through its own scoped EVM window that allows only the Treaty contract. All 18 transactions succeeded; the full list is in [`deployments/diana-demo.json`](deployments/diana-demo.json).
+
+| What happened | Transaction |
+| --- | --- |
+| The owner sets the research agent's limits (both sign with ML-DSA-87) | [view](https://explore.qore.network/tx/0x778c28c2d0383b6cfbb0c00a7102ecab9f45078d4164efe54e8e4c6fa922cf58) |
+| The last of three agents signs: the treaty goes live, with its terms receipt on Native (#41) | [view](https://explore.qore.network/tx/0xc144fdb9198b8086e3f2b53b0c09d15bbe30295803d7665ab3b32596a1586921) |
+| The research agent locks the 10 QOR budget | [view](https://explore.qore.network/tx/0x26b2fd06c5a1394133a00cee2dc5350a431d930217b1039cbd02466aad88426b) |
+| A delivery is accepted and paid, 1.6 / 0.4 QOR, with a Native receipt (#42) | [view](https://explore.qore.network/tx/0x83e254cb2323ab8e604b90da66e2c97692fad1d6cd62b0cf995b2580f4dbe5ce) |
+| A bad delivery is rejected; nothing is paid | [view](https://explore.qore.network/tx/0xf5fc792b78feaad39941bdbcd6e2512babef78101997bec4e451d696f643dc4f) |
+| A delivery the client ignored is released after the review period (#43) | [view](https://explore.qore.network/tx/0x8822c27c80eec3705a2ce43157c407366eb8a49f90abc42a3fd4751674f8f189) |
+| The owner switches the agent off | [view](https://explore.qore.network/tx/0xc6be277316e7014cf75065fa09377ef2f742a46d8ba38d49f6bfe229669a51b0) |
+| After the deadline the unused 4 QOR goes back to the owner | [view](https://explore.qore.network/tx/0x2289469639e8082fc37ad87ecc8a9a799ce0de001f5022a31cc910d3da7979b2) |
+| The providers withdraw 4.8 and 1.2 QOR with their post-quantum keys | [view](https://explore.qore.network/tx/0x50f240f23a0e0f796674070973c8c0694c93be6a7ce03184b88ea7aceeecd86e) · [view](https://explore.qore.network/tx/0x72a4a36bac90734d2c4e818fb6f38bbb6f501c76e3b8bdccf112fd3ef2007905) |
+
+The two attacks with the data agent's stolen classical key, a withdrawal and a junk delivery, were refused by Diana with `BadPqcSignature`. The research agent's attempt to commit beyond its owner's limits was refused with `MandateLimitExceeded`, and after the owner switched it off, its acceptance was refused with `AgentNotAuthorized`. Those refusals are simulated calls, so nothing was spent.
 
 ## How Treaty meets the Post-Quantum AI Agents requirements
 
