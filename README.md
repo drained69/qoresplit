@@ -1,40 +1,173 @@
-# QoreSplit
+# Treaty
 
-QoreSplit is a checkout for workshops, creators, and other collaborators who share revenue. One checkout credits separate balances for two or three recipients on QoreChain EVM and records a matching receipt on QoreChain Native. Each recipient withdraws their own balance.
+**Binding deals between AI agents, safe after Q-Day.**
 
-## Run locally
+Treaty lets AI agents, people, or both agree on terms, sign them with post-quantum keys, and have a contract on QoreChain hold the money and pay it out exactly as agreed. An agent's human owner sets limits the contract enforces, and can switch the agent off.
 
-Requires Node.js 22.9 or later. The contract integration tests also require Foundry's `anvil` on PATH.
+> **Build Before Q-Day** · category: **Post-Quantum AI Agents** · network: QoreChain **Diana** testnet (EVM chain ID 9800)
+> Treaty contract on Diana: [`0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6`](https://explore.qore.network/tx/0x3b340dfb4b1ba82a5de93a52c7c3f8c5f5b0926fb81ffd54b1002b6b5c6bc17a) · Deployment, accounts and windows: [`deployments/diana.json`](deployments/diana.json) · Live run: [18 transactions](#live-on-diana) · Video: *link added at submission*
+
+![Treaty](assets/featured.png)
+
+## The problem
+
+AI agents are starting to pay each other for work. Today that means either trusting the other agent, or trusting whoever holds the money, and handing a bot a private key whose limits live only in its own code. One bug, one prompt injection or one stolen key and the money is gone. And the money that builds up in budgets and revenue shares is exactly what a future quantum computer would target, because ordinary wallet keys (secp256k1) are what it breaks.
+
+## What Treaty does
+
+- **Every party signs the exact terms** with its **ML-DSA-87** key. The contract checks each signature on chain with QoreChain's `pqcVerify` precompile, against the key the chain's own registry holds for that account (`pqcKeyStatus`). Nobody can be committed, paid or added without signing.
+- **The contract holds the money.** A client locks the whole budget before work counts. Every agreement and every payment also writes a receipt on QoreChain Native in the same transaction, through the governance-pinned Cross-VM bridge, so anyone can verify it on both VMs.
+- **A stolen wallet key gets nothing.** Accepting terms, delivering work, reviewing it, withdrawing, and an owner's limits and off switch all need an ML-DSA-87 signature. A stolen or quantum-broken secp256k1 key alone cannot do any of it.
+- **Owners keep agents on a leash.** The largest budget per treaty, the total the agent may commit, and an expiry, all enforced by the contract. Switching the agent off stops it signing anything; from then on only the owner can move its money, and unused budgets go back to the owner.
+- **Readable signatures, in the browser too.** Every signature is in the QoreSign message format with plain text, for example `Treaty: accept delivery 0 of treaty #3`. People sign in the browser with the **QoreX** wallet and see exactly what they approve; agents sign the same bytes with the SDK.
+
+### Two kinds of treaty
+
+| | Service treaty | Revenue share |
+| --- | --- | --- |
+| For | Hiring an agent (or a team of agents) for work | Selling something together |
+| Who signs | The client and every provider | Every party |
+| Money in | The client (or its owner) locks price per unit × units | Anyone pays a fixed price |
+| Money out | Each accepted unit is paid, split between the providers | Each payment is split by shares |
+| If the client goes quiet | A delivery it neither accepts nor rejects pays itself after the review period | — |
+| At the end | After the deadline, unused budget returns to the client, or its owner | — |
+| Changes | Agree a new treaty | A new version every old and new party signs |
+
+## Live on Diana
+
+The whole agents story ran on QoreChain Diana on 26 November 2026, from four separate accounts, each acting through its own scoped EVM window that allows only the Treaty contract. All 18 transactions succeeded; the full list is in [`deployments/diana-demo.json`](deployments/diana-demo.json).
+
+| What happened | Transaction |
+| --- | --- |
+| The owner sets the research agent's limits (both sign with ML-DSA-87) | [view](https://explore.qore.network/tx/0x778c28c2d0383b6cfbb0c00a7102ecab9f45078d4164efe54e8e4c6fa922cf58) |
+| The last of three agents signs: the treaty goes live, with its terms receipt on Native (#41) | [view](https://explore.qore.network/tx/0xc144fdb9198b8086e3f2b53b0c09d15bbe30295803d7665ab3b32596a1586921) |
+| The research agent locks the 10 QOR budget | [view](https://explore.qore.network/tx/0x26b2fd06c5a1394133a00cee2dc5350a431d930217b1039cbd02466aad88426b) |
+| A delivery is accepted and paid, 1.6 / 0.4 QOR, with a Native receipt (#42) | [view](https://explore.qore.network/tx/0x83e254cb2323ab8e604b90da66e2c97692fad1d6cd62b0cf995b2580f4dbe5ce) |
+| A bad delivery is rejected; nothing is paid | [view](https://explore.qore.network/tx/0xf5fc792b78feaad39941bdbcd6e2512babef78101997bec4e451d696f643dc4f) |
+| A delivery the client ignored is released after the review period (#43) | [view](https://explore.qore.network/tx/0x8822c27c80eec3705a2ce43157c407366eb8a49f90abc42a3fd4751674f8f189) |
+| The owner switches the agent off | [view](https://explore.qore.network/tx/0xc6be277316e7014cf75065fa09377ef2f742a46d8ba38d49f6bfe229669a51b0) |
+| After the deadline the unused 4 QOR goes back to the owner | [view](https://explore.qore.network/tx/0x2289469639e8082fc37ad87ecc8a9a799ce0de001f5022a31cc910d3da7979b2) |
+| The providers withdraw 4.8 and 1.2 QOR with their post-quantum keys | [view](https://explore.qore.network/tx/0x50f240f23a0e0f796674070973c8c0694c93be6a7ce03184b88ea7aceeecd86e) · [view](https://explore.qore.network/tx/0x72a4a36bac90734d2c4e818fb6f38bbb6f501c76e3b8bdccf112fd3ef2007905) |
+
+The two attacks with the data agent's stolen classical key, a withdrawal and a junk delivery, were refused by Diana with `BadPqcSignature`. The research agent's attempt to commit beyond its owner's limits was refused with `MandateLimitExceeded`, and after the owner switched it off, its acceptance was refused with `AgentNotAuthorized`. Those refusals are simulated calls, so nothing was spent.
+
+## How Treaty meets the Post-Quantum AI Agents requirements
+
+| Requirement | How Treaty meets it | Where |
+| --- | --- | --- |
+| The agent's own **scoped EVM window**: transaction, value, duration and target limits | Each agent opens its own window, signed hybrid with its ML-DSA-87 key: the only allowed target is the Treaty contract, with a capped number of transactions, a capped value (budget plus fees) and a block limit of about an hour. | `npm run accounts -- windows` ([scripts/accounts.mjs](scripts/accounts.mjs)) |
+| **Spending rules** enforced on chain | The owner's mandate: the largest budget per treaty, the total committed, an expiry and an off switch, checked by the contract when the agent agrees and when the budget is locked. Budgets are locked in the contract and released only per accepted (or unreviewed) delivery. | `setMandate`, `_checkMandate`, `fund`, `revokeMandate` in [contracts/Treaty.sol](contracts/Treaty.sol) |
+| **Authenticated messaging** | Every message an agent sends (accepting terms, delivering work with its hash, accepting or rejecting it, withdrawing) is an ML-DSA-87-signed QoreSign message that the contract verifies with `pqcVerify` against the sender's registered key. Agents can also pass these as signed requests that any wallet relays. | [sdk/treaty.mjs](sdk/treaty.mjs), [src/protocol.js](src/protocol.js) |
+| Post-quantum protection of sensitive actions | `pqcVerify` and `pqcKeyStatus` are called on every signed action; the stolen-key attack is shown live in the demo. | [contracts/Treaty.sol](contracts/Treaty.sol), [examples/agents-demo.mjs](examples/agents-demo.mjs) |
+
+Treaty also uses the **Cross-VM** bridge (atomic EVM-to-Native receipts) and **QoreX message signing**.
+
+## Try it
+
+Requires Node.js 22.9 or later.
 
 ```sh
 npm ci
-npm run dev
-npm test
-npm run build
+npm run demo
 ```
 
-The app opens in preview mode until you configure a Diana deployment. You can edit a split and see the payout calculation in preview mode. Live writes and receipt lookups require a contract address.
+In about 30 seconds, on a local Diana stand-in where every party has its own real ML-DSA-87 key, a research agent with a budget from its owner hires a data agent and a cleaning agent (80/20):
 
-## Deploy and use on Diana
+1. The owner sets limits: 10 QOR per treaty, 15 QOR in total, 7 days. The agent then tries to commit to a second treaty: refused.
+2. All three agents sign the terms; the research agent locks 10 QOR.
+3. A good dataset is accepted and paid; a bad one is rejected; a fixed one that the client ignores is released after the review period.
+4. An attacker with the data agent's stolen wallet key tries to withdraw and to deliver junk: both blocked.
+5. The owner switches the research agent off. After the deadline the unused 4 QOR goes back to the owner, not the agent.
+6. The team withdraws with their post-quantum keys.
 
-1. Prepare a dedicated, [funded Diana account](https://dashboard.qorechain.io/faucet) using the [QoreChain workshop signing flow](https://docs.qorechain.io/build-before-qday/workshop-2/). Register its ML-DSA-87 key and open an EVM window that permits deployment. Contract creation requires a window without an allowed-target list. Keep the private key and recovery code local.
-2. Copy `.env.example` to `.env` and set `DIANA_DEPLOYER_KEY` to the dedicated test account's EVM key. Run `npm run deploy`. Set `VITE_QORESPLIT_ADDRESS` to the confirmed address printed by the deploy script. Restart the dev server or rebuild the app. Serve the app with `npm run preview` for local checks. The build also emits a standalone Worker at `dist/server/index.js` that serves the app and the Diana Native reads. For other hosts, route `/api/native/` to the same read handler, since Diana Native REST does not allow browser cross-origin requests.
-3. Connect MetaMask or a compatible EVM wallet. Use an Ethereum-style QoreChain test account (coin type 60) with a registered PQ key and an open EVM window. For normal operation permit the deployed QoreSplit address and allow sufficient transaction count, QOR including fees, and expiry. Recipients need their own funded, ready EVM accounts to withdraw. [QoreChain wallet setup](https://docs.qorechain.io/getting-started/wallet-setup/) and [authorization windows](https://docs.qorechain.io/developer-guide/evm-window-reference/) cover this setup.
-4. Publish a link for a workshop priced at **12 QOR** with shares of **50%, 30%, and 20%**. Share the checkout URL. Pay from a prepared payer wallet. The receipt shows **6, 3.6, and 2.4 QOR** credited. Open it in a separate browser to verify EVM and Native records without connecting a wallet.
-5. Connect one recipient and withdraw their share. The other recipients' credits remain available independently.
+`npm run demo -- --serve` keeps the chain running and opens the web app on the result. `npm run demo -- --diana` runs the same story on Diana itself (below).
 
-## Checkout guarantees
+## Run it on Diana
 
-- A link keeps its original title, price, recipient addresses, and shares. A different split requires a different link. Shared URLs include the deployment address. Titles and recipient addresses are public.
-- A checkout accepts the exact price once per payer, link, and payment reference. The contract rounds down to whole uqor for all but the last recipient, who gets the remainder. The interface previews the exact amounts.
-- The checkout credits every share and calls the Diana bridge at `0x0901` with the receipt commitment. A failed bridge call or an empty receipt response reverts the checkout. The transaction fee can still apply to a mined revert.
-- Verification recomputes the commitment from the EVM event and immutable link. It reads the Native receipt ID returned during checkout and independently checks the stored receipt's sender, height, and commitment. The UI distinguishes an EVM confirmation from successful verification on both sides.
-- Withdrawals can only be made by the recipient to their own address. An unsuccessful withdrawal restores that recipient's credit. There is no operator withdrawal or payout redirection.
+```sh
+npm run accounts -- create      # five fresh testnet accounts in .env.diana (git-ignored)
+```
 
-The bridge target is the workshop's [governance-approved Native receipt book](https://docs.qorechain.io/build-before-qday/workshop-3/). The app's receipt verifies checkout and accounting. Withdrawal is a separate EVM transaction.
+Claim test QOR for each printed `qor1…` address at the [faucet](https://dashboard.qorechain.io/faucet), then:
+
+```sh
+npm run accounts -- register    # register each account's ML-DSA-87 key
+npm run accounts -- deploy      # deploy Treaty (saves its address to .env.diana)
+npm run accounts -- windows     # open each party's scoped EVM window
+npm run demo -- --diana         # the agents demo on Diana; saves deployments/diana-demo.json
+npm run accounts -- status      # balances, keys and windows at any time
+```
+
+The web app: set `VITE_TREATY_ADDRESS` to the deployed address and run `npm run dev`, or `npm run build` for a static site plus a Worker (`dist/server/index.js`) that serves the app and the two Diana Native reads. On other hosts, route `/api/native/` to the same handler, because Diana Native REST does not allow browser cross-origin requests.
+
+## Build with it
+
+### For agents: the SDK
+
+```js
+import { Treaty } from './sdk/treaty.mjs';
+
+const agent = await Treaty.connect({ contract, mnemonic });        // or privateKey + recoveryCode
+const id = await agent.proposeService({
+  title: 'Clean five survey datasets', unitPrice: '2', maxUnits: 5,
+  deadline, reviewPeriod: 600, client: agent.address,
+  providers: [dataAgent, cleaningAgent], shares: [8000, 2000],
+});
+await agent.sign(id);                     // checks the terms, signs them with ML-DSA-87
+await agent.fund(id);                     // locks the budget
+// a provider: await provider.deliver(id, workBytes)
+await agent.accept(id, 0);                // or reject(id, unit); anyone can release(id, unit) later
+await provider.withdraw('all');
+```
+
+Every signed action rebuilds the exact bytes from the on-chain terms and refuses to sign if the contract would check anything else. It checks the local key against the chain's registry and the account's EVM window before sending. `{ relay: true }` returns a signed request any wallet can submit. Owners: `agent.approveOwner(limits)` returns the agent's consent, `owner.setMandate({ agent, ...limits, agentSignature })` sets the limits, and `owner.revoke(agent)` switches it off.
+
+### For people: QoreX in the browser, or the signing tool
+
+In the web app, people sign with the **QoreX** wallet: accept terms, deliver a file (only its hash goes on chain), accept or reject a delivery, withdraw, or switch an agent off. Any connected EVM wallet then sends the transaction. Without QoreX, the same actions are in the signing tool, with keys in `.env` (`QORE_MNEMONIC`, or `PRIVATE_KEY` with `QORE_PQC_RECOVERY_CODE`):
+
+| Command | What it does |
+| --- | --- |
+| `npm run pq -- whoami` | Your addresses, and whether your local ML-DSA-87 key matches the chain |
+| `npm run pq -- show <id>` | A treaty's terms, signatures and deliveries |
+| `npm run pq -- sign <id>` | Accept a treaty's terms |
+| `npm run pq -- fund <id>` | Lock a service treaty's budget |
+| `npm run pq -- deliver <id> --file f` | Deliver one unit; only its hash goes on chain |
+| `npm run pq -- accept <id> <unit>` / `reject` | Review a delivery as the client |
+| `npm run pq -- release <id> <unit>` / `refund <id>` | Pay an ignored delivery; return unused budget after the deadline |
+| `npm run pq -- withdraw <QOR\|all> [--to 0x…] [--for 0x…]` | Pay out earnings (`--for`: an agent you own and switched off) |
+| `npm run pq -- statement [0x…]` | Earnings, withdrawals, treaties and owner limits of an address |
+| `npm run pq -- approve-owner …` / `set-limits …` / `revoke <agent>` | Put an agent under an owner's limits, or switch it off |
+| `npm run pq -- attack [QOR]` | Demo: your classical key alone tries to withdraw. Simulated; nothing is sent |
+
+`--out file.json` saves a signed request instead of sending it; paste it into *Submit a signature* in the app. `--yes` skips the confirmation.
+
+## Guarantees
+
+- A treaty's terms never change. A revenue share changes only through a new version that every old and new party signs; the old version then stops taking payments and keeps its history.
+- Each signature names the chain, the contract and exactly what it authorises: the terms hash, the work's hash and its unit number, the reviewed delivery, the withdrawal's destination, amount and number, or the owner's limits and change number. None can be replayed elsewhere.
+- Signer keys are read from the chain's registry at the moment of signing and must have a proof of possession.
+- A service budget is locked in full, by the client or its owner, before any work counts. Pending deliveries stay reserved after the deadline; only the rest is refundable. Shares round down to whole uqor except the last, which gets the remainder.
+- An agent with an owner cannot agree to, or be funded for, a treaty beyond its limits. Once switched off or expired, it cannot sign anything; withdrawals of its earnings then need the owner's signature, and its refunds go to the owner.
+- Agreements and payments call the Diana bridge at `0x0901`. A failed bridge call or an empty receipt reverts the whole transaction.
+- There is no contract owner, operator withdrawal, pause, or upgrade.
 
 ## Verification
 
-`npm test` deploys QoreSplit to a local Anvil node with a bridge test double. It checks exact rounding, receipt commitment, independent withdrawals, repeated payment protection, input validation, and checkout rollback when the bridge rejects or is inactive. The production contract has no failure switch. The Native route tests verify that the proxy only accepts the two fixed Diana read routes and returns the Native receipt body without caching. See [AUDIT.md](AUDIT.md) for the release review and its verification limits.
+| Command | What it proves | Needs |
+| --- | --- | --- |
+| `npm test` | The contract's rules on an in-process EVM with stand-ins for the bridge and the post-quantum precompiles: consent, signature binding, keys, amendments, cancellation, the stolen-key attack, relayed withdrawals and replay, rounding, receipts, Native rollback, invalid terms; service budgets, deliveries, reviews, release, unit caps, deadlines and refunds; owner limits, changes, switching off and expiry. The contract's exact message bytes are checked against the SDK's, and signed with real ML-DSA-87 keys. | Nothing |
+| `npm run e2e` | The whole product on a local Diana stand-in (chain ID 9800) whose `pqcVerify` accepts a signature only after real ML-DSA-87 verification: the real deploy script and signing tool as separate processes with fresh keys; revenue shares, service treaties and agent limits end to end; the web app in a real browser, including QoreX signing with real QoreSign signatures; and the agents demo. | Playwright for the browser part (`npm i -D playwright && npx playwright install chromium`); without it that part is skipped |
+| `npm run check:diana` | Diana itself, read-only: `pqcVerify` accepts real ML-DSA-87 signatures, including QoreX-style ones, over Treaty's exact messages and refuses tampered ones; Treaty's deployment fits Diana's limits and its code runs on Diana's EVM; the key registry, verifier and bridge answer from a contract as Treaty expects; Native REST returns receipts and windows as the app reads them. | Network access to Diana |
 
-Credit to the [QoreChain workshop](https://github.com/qorechain/build-before-qday/tree/main/workshop-3/02-cross-vm) for the reference bridge interface and shared Native receipt contract.
+On a network that requires an HTTPS proxy, run the Node scripts with `NODE_USE_ENV_PROXY=1` (Node 22.21 or later). See [AUDIT.md](AUDIT.md) for the release review and [AI_USAGE.md](AI_USAGE.md) for how AI was used to build Treaty.
+
+## Credits
+
+Built during Build Before Q-Day (from November 2026). Uses the QoreChain kits and examples, with thanks:
+
+- [`@qorechain/sdk`](https://www.npmjs.com/package/@qorechain/sdk), [`@qorechain/evm`](https://www.npmjs.com/package/@qorechain/evm) and [`@qorechain/qoresign`](https://www.npmjs.com/package/@qorechain/qoresign): ML-DSA-87 keys and signing, PQC key registration, EVM windows, QoreSign message signing.
+- The [Build Before Q-Day workshops](https://github.com/qorechain/build-before-qday): the Cross-VM bridge interface and the governance-approved Native receipt book (workshop 3), the `pqcVerify` vault pattern and the window script (workshop 2), the spend-capped agent idea (workshop 2).
+- [viem](https://viem.sh), [solc-js](https://github.com/ethereum/solc-js), [Vite](https://vitejs.dev), [@scure/base](https://github.com/paulmillr/scure-base); [Hardhat](https://hardhat.org) and [Playwright](https://playwright.dev) for testing.
+
+Licence: [MIT](LICENSE).

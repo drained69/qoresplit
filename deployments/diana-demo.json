@@ -1,0 +1,105 @@
+{
+  "network": "qorechain-diana",
+  "contract": "0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6",
+  "startedAt": "2026-11-26T19:55:19.210Z",
+  "parties": {
+    "Olivia, a human": "0x83247522D8f37598111CeB0B4ECC6C4C6747BEC2",
+    "Research agent": "0x378C243566d8e545e3E32e8555De03403f66b998",
+    "Data agent": "0xD775Fe7305B3f666620158aA1e1e9058cfedE5e9",
+    "Cleaning agent": "0x9fd33a135D15282986A8E84576c0BCe2154F1854"
+  },
+  "steps": [
+    {
+      "step": "owner sets the agent’s limits",
+      "tx": "0x778c28c2d0383b6cfbb0c00a7102ecab9f45078d4164efe54e8e4c6fa922cf58",
+      "block": "10807125"
+    },
+    {
+      "step": "Data agent signs the terms",
+      "tx": "0x94455203160fd0401422a8183ff0babfc8e39627092a02fd12ed7e7d14cf365c",
+      "block": "10807130"
+    },
+    {
+      "step": "Cleaning agent signs the terms",
+      "tx": "0x7ccddb392418ed3882fa9f33f3e021420332934fac849ce481faa6cc118317bd",
+      "block": "10807134"
+    },
+    {
+      "step": "Research agent signs the terms",
+      "tx": "0xc144fdb9198b8086e3f2b53b0c09d15bbe30295803d7665ab3b32596a1586921",
+      "block": "10807141"
+    },
+    {
+      "step": "the client locks the budget",
+      "tx": "0x26b2fd06c5a1394133a00cee2dc5350a431d930217b1039cbd02466aad88426b",
+      "block": "10807144"
+    },
+    {
+      "step": "a second treaty for the data agent",
+      "tx": "0x3ff24cff10bdf52561aa5c29829932612cbfbc181f0697cb05bd48cc1d2eb262",
+      "block": "10807149"
+    },
+    {
+      "step": "the data agent delivers dataset 1",
+      "tx": "0x4833e410dd7b28193c415d2fa849c2d28503269fd3f0e4f6f752a3d0d793bdc3",
+      "block": "10807160"
+    },
+    {
+      "step": "the client accepts it",
+      "tx": "0x83e254cb2323ab8e604b90da66e2c97692fad1d6cd62b0cf995b2580f4dbe5ce",
+      "block": "10807163"
+    },
+    {
+      "step": "the data agent delivers dataset 2",
+      "tx": "0xfe2e2cfbbebb3b17a9f60981134dd39b45a86aa31a19c3a8118492dbf9775bc8",
+      "block": "10807166"
+    },
+    {
+      "step": "the client rejects it",
+      "tx": "0xf5fc792b78feaad39941bdbcd6e2512babef78101997bec4e451d696f643dc4f",
+      "block": "10807169"
+    },
+    {
+      "step": "the data agent delivers a fixed dataset",
+      "tx": "0xc10d5a5d0af294f7b5d98c1c24c265d9d7a96c410721f5be9ab4be26987451ce",
+      "block": "10807172"
+    },
+    {
+      "step": "the cleaning agent releases the ignored delivery",
+      "tx": "0x8822c27c80eec3705a2ce43157c407366eb8a49f90abc42a3fd4751674f8f189",
+      "block": "10807224"
+    },
+    {
+      "step": "the owner switches the agent off",
+      "tx": "0xc6be277316e7014cf75065fa09377ef2f742a46d8ba38d49f6bfe229669a51b0",
+      "block": "10807234"
+    },
+    {
+      "step": "the data agent delivers another dataset",
+      "tx": "0x94e9e9cc517206c0339eb08bcbe7a94a69e8f8142808ce09366e8fee86075d9f",
+      "block": "10807240"
+    },
+    {
+      "step": "the cleaning agent releases the last delivery",
+      "tx": "0x518cfeed74aaa3e5ce025c8c0063e63d45ff8cb45ee3f76d1eef2f5114e44164",
+      "block": "10807514"
+    },
+    {
+      "step": "the unused budget goes back",
+      "tx": "0x2289469639e8082fc37ad87ecc8a9a799ce0de001f5022a31cc910d3da7979b2",
+      "block": "10807517"
+    },
+    {
+      "step": "Data agent withdraws",
+      "tx": "0x50f240f23a0e0f796674070973c8c0694c93be6a7ce03184b88ea7aceeecd86e",
+      "block": "10807522"
+    },
+    {
+      "step": "Cleaning agent withdraws",
+      "tx": "0x72a4a36bac90734d2c4e818fb6f38bbb6f501c76e3b8bdccf112fd3ef2007905",
+      "block": "10807527"
+    }
+  ],
+  "treaty": "1",
+  "finishedAt": "2026-11-26T20:04:58.171Z"
+}

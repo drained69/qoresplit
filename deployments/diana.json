@@ -1,0 +1,28 @@
+{
+  "network": "qorechain-diana",
+  "evmChainId": 9800,
+  "contract": {
+    "name": "Treaty",
+    "address": "0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6",
+    "deployTx": "0x3b340dfb4b1ba82a5de93a52c7c3f8c5f5b0926fb81ffd54b1002b6b5c6bc17a",
+    "block": 10807010,
+    "gasUsed": 4688260,
+    "signingChain": "qorechain-diana",
+    "runtimeMatchesThisBuild": true,
+    "deployedAt": "2026-11-26T19:52Z"
+  },
+  "parties": {
+    "deployer": { "qor": "qor12keafr4tgzmwg8uexn68yr4claeh9dcc2tz30e", "evm": "0x55b3d48Eab40B6e41f9934f4720eB8Ff7372B718" },
+    "owner": { "qor": "qor1svj82gkc7d6esyguav95anrvf3n500kz7zglfn", "evm": "0x83247522D8f37598111CeB0B4ECC6C4C6747BEC2" },
+    "researchAgent": { "qor": "qor1x7xzgdtxmrj5tclr96z4thsrgqlkdwvcckayku", "evm": "0x378C243566d8e545e3E32e8555De03403f66b998" },
+    "dataAgent": { "qor": "qor16a6luuc9k0mxvcsptz4pu85str87me0fxptsur", "evm": "0xD775Fe7305B3f666620158aA1e1e9058cfedE5e9" },
+    "cleaningAgent": { "qor": "qor1nlfn5y6az55znp4gapzhds9uug257xz5h4yh2w", "evm": "0x9fd33a135D15282986A8E84576c0BCe2154F1854" }
+  },
+  "windows": [
+    { "party": "deployer", "tx": "0C0C259945C6F72422EAA87C867ED0B2CCCE862F5D1B5DFBF2BFAC21CD7D1F2E", "height": 10807004, "blocks": 400, "maxTxs": 2, "maxValueUqor": 4200000, "allowedTargets": [], "why": "contract creation needs a window without a target list" },
+    { "party": "owner", "tx": "41EF76DD971CE086ECE03340F091604AB219342A45B272B8E8490803F60EED50", "height": 10807035, "blocks": 2500, "maxTxs": 30, "maxValueUqor": 34500000, "allowedTargets": ["0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6"] },
+    { "party": "researchAgent", "tx": "4206BBBDCBCF3F84A97B87AE06FB3BE4B8327E1BFE4B0B830542C738394180B8", "height": 10807038, "blocks": 2500, "maxTxs": 30, "maxValueUqor": 34500000, "allowedTargets": ["0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6"] },
+    { "party": "dataAgent", "tx": "93204FF3C59F4A826279818D66E82E2ABD4DE7D10F00B2F31775A08940D9EB1F", "height": 10807041, "blocks": 2500, "maxTxs": 30, "maxValueUqor": 22500000, "allowedTargets": ["0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6"] },
+    { "party": "cleaningAgent", "tx": "95A6C97446A5E87CCD758D294821A385EA8DB539602E5B5099F33ADB4EB7AE4A", "height": 10807044, "blocks": 2500, "maxTxs": 30, "maxValueUqor": 22500000, "allowedTargets": ["0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6"] }
+  ]
+}
