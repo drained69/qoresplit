@@ -340,7 +340,9 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
     window.ethereum = {
       isMetaMask: true, on() {},
       async request({ method, params }) {
-        if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [from];
+        // A test can switch the wallet's account; the local chain impersonates it.
+        const current = sessionStorage.getItem('wallet-account') || from;
+        if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [current];
         if (method === 'eth_chainId') return '0x2648';
         if (method.startsWith('wallet_')) return null;
         const response = await fetch(rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
@@ -471,6 +473,13 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await pqOk(alice, 'sign', job, '--yes');
   await go('#agreement/' + contract + '/' + job);
   assert.match(await page.textContent('.tag'), /waiting for the budget/);
+  // Only the client can lock the budget: the payer's wallet is refused before anything is sent.
+  await page.click('#fund');
+  await page.waitForFunction(() => document.querySelector('#status')?.dataset.kind === 'error', null, { timeout: 30_000 });
+  assert.match(await statusText(), /Only the client/);
+  await diana.client.request({ method: 'hardhat_impersonateAccount', params: [alice.address] });
+  await page.evaluate((account) => sessionStorage.setItem('wallet-account', account), alice.address);
+  await go('#agreement/' + contract + '/' + job);
   await page.click('#fund');
   await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('is locked'), null, { timeout: 30_000 });
   assert.match(await page.textContent('.tag'), /budget locked/);
@@ -494,6 +503,9 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   assert.match(await page.textContent('.action h2'), /2 units paid of 3/);
   // After the deadline the unused unit goes back to alice, from the app.
   await diana.advance(4 * 86_400);
+  await go('#agreement/' + contract + '/' + job);
+  // Anyone may return the unused budget; the payer's wallet does it, so alice pays no gas here.
+  await page.evaluate((account) => sessionStorage.setItem('wallet-account', account), payer);
   await go('#agreement/' + contract + '/' + job);
   const aliceBefore = await diana.client.getBalance({ address: alice.address });
   await page.click('#refund');

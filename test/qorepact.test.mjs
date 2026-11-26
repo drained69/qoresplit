@@ -525,17 +525,19 @@ test('a service pact locks the budget, pays accepted work, releases ignored work
   assert.equal(agreement.kind, 1);
   assert.deepEqual(agreement.signers, [seller, helper, buyer], 'providers and the client all sign');
   assert.equal(agreement.termsHash, termsHash({ ...terms, kind: 1 }));
-  await reverts(payer, 'fund', [id], 'NotActive', budgetOf(terms));
+  await reverts(buyer, 'fund', [id], 'NotActive', budgetOf(terms));
   await reverts(payer, 'checkout', [id, keccak256(stringToHex('not a shop'))], 'WrongKind', UNIT);
   for (const signer of agreement.signers) await signTerms(id, signer);
   assert.equal((await read('getAgreement', [id])).status, 2);
 
   // Funding: exactly the budget, once.
   await reverts(relayer, 'deliver', [id, seller, deliverableHash('x'), '0x00'], 'NotFunded');
-  await reverts(payer, 'fund', [id], 'IncorrectPayment', UNIT);
-  const funded = eventNamed(await sendOk(payer, 'fund', [id], parseEther('10')), 'Funded');
+  // Only the client (or its owner) locks the budget, since unused budget is refunded to them.
+  await reverts(payer, 'fund', [id], 'NotClient', parseEther('10'));
+  await reverts(buyer, 'fund', [id], 'IncorrectPayment', UNIT);
+  const funded = eventNamed(await sendOk(buyer, 'fund', [id], parseEther('10')), 'Funded');
   assert.equal(funded.amount, parseEther('10'));
-  await reverts(payer, 'fund', [id], 'AlreadyFunded', parseEther('10'));
+  await reverts(buyer, 'fund', [id], 'AlreadyFunded', parseEther('10'));
 
   // Delivery: only providers, only with their own post-quantum signature.
   const content = 'dataset 1: 10,000 cleaned rows';
@@ -644,7 +646,9 @@ test('an owner limits what its agent can commit, can switch it off, and then con
   await reverts(relayer, 'sign', [big.id, buyer, signAs(buyer, await read('termsMessage', [big.id, buyer]))], 'MandateLimitExceeded');
   // Within limits: agreed and funded; the commitment counts against the total.
   const { id } = await agreeService();
-  await sendOk(payer, 'fund', [id], parseEther('10'));
+  // The owner may lock its agent's budget too; it counts against the agent's limits all the same.
+  await reverts(mallory, 'fund', [id], 'NotClient', parseEther('10'));
+  await sendOk(owner, 'fund', [id], parseEther('10'));
   assert.equal((await read('getMandate', [buyer])).committed, parseEther('10'));
   const second = await proposeService({ maxUnits: 4 });
   for (const signer of [seller, helper]) await signTerms(second.id, signer);
@@ -659,7 +663,7 @@ test('an owner limits what its agent can commit, can switch it off, and then con
 
   // The agent earns something as a provider in another pact.
   const { id: job } = await agreeService({ client: agentB, recipients: [buyer], shares: [10000], maxUnits: 1 });
-  await sendOk(payer, 'fund', [job], UNIT);
+  await sendOk(agentB, 'fund', [job], UNIT);
   const { unit } = await deliverAs(buyer, job, 'summary');
   await sendOk(relayer, 'accept', await review(job, unit, true, agentB));
   assert.equal(await read('claimable', [buyer]), UNIT);

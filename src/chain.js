@@ -204,6 +204,7 @@ const errorText = {
   InsufficientBalance: 'That is more than the available balance.',
   TransferFailed: 'The destination refused the payment. Nothing changed.',
   WrongKind: 'That action does not apply to this kind of pact.',
+  NotClient: 'Only the client, or the client’s owner, can lock this budget. Connect that wallet.',
   AlreadyFunded: 'This pact’s budget is already locked.',
   NotFunded: 'The client has not locked the budget yet.',
   DeadlinePassed: 'The pact’s deadline has passed.',

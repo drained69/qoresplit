@@ -110,6 +110,7 @@ contract QorePact {
     error NotASigner();
     error AlreadySigned();
     error NotAuthorized();
+    error NotClient();
     error PqcKeyNotRegistered();
     error PqcKeyNotProven();
     error BadPqcSignature();
@@ -283,9 +284,11 @@ contract QorePact {
 
     // -------------------------------------------------------------- service
 
-    /// Lock the whole budget of an agreed service pact. Anyone may fund it, before the deadline.
+    /// Lock the whole budget of an agreed service pact, before the deadline. Only the client, or
+    /// the client's owner when it is an agent, may fund it: unused budget is refunded to them.
     function fund(uint256 id) external payable {
         Agreement storage agreement = _service(id);
+        if (msg.sender != agreement.client && msg.sender != mandates[agreement.client].owner) revert NotClient();
         if (agreement.status != Status.Active) revert NotActive();
         if (agreement.funded) revert AlreadyFunded();
         if (block.timestamp > agreement.deadline) revert DeadlinePassed();

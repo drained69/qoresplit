@@ -394,7 +394,7 @@ async function serviceSection(id, agreement, revision) {
   if (agreement.state === 'Active' && !agreement.funded) {
     main = `<section class="card action"><div class="tag warn">Live · waiting for the budget</div>
       <h2>${pastDeadline ? 'The deadline passed before the budget was locked' : 'The client locks ' + formatQor(agreement.budget)}</h2>
-      <p>${pastDeadline ? 'Nothing was locked, so there is nothing to return.' : 'Every party signed. Work starts once the budget is in the contract, where the providers can see it. Anyone can lock it; the client’s owner limits apply.'}</p>
+      <p>${pastDeadline ? 'Nothing was locked, so there is nothing to return.' : 'Every party signed. Work starts once the budget is in the contract, where the providers can see it. The client locks it, or its owner when the client is an agent; the owner’s limits apply.'}</p>
       ${pastDeadline ? '' : `<button class="primary" id="fund" type="button" ${address ? '' : 'disabled'}>Lock ${formatQor(agreement.budget)}</button>`}
       ${command('npm run pq -- fund ' + id)}</section>`;
   } else if (agreement.state === 'Active') {

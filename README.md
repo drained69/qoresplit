@@ -108,7 +108,7 @@ Browser wallets cannot make ML-DSA-87 signatures over arbitrary bytes yet: QoreX
 - A pact's terms never change. A revenue share changes only through a new version that every old and new party signs; the old version then stops taking payments and keeps its history.
 - Each signature covers the chain ID, the contract and exactly what it authorises: the terms hash, the delivered work's hash and its unit number, the reviewed delivery, the withdrawal's destination, amount and nonce, or the owner's limits and nonce. None can be replayed elsewhere.
 - Signer keys are read from the chain's registry at the moment of signing and must have a proof of possession.
-- A service budget is locked in full before any work counts. Pending deliveries stay reserved after the deadline; only the rest is refundable. Shares round down to whole uqor except the last, which gets the remainder.
+- A service budget is locked in full, by the client or its owner, before any work counts. Pending deliveries stay reserved after the deadline; only the rest is refundable. Shares round down to whole uqor except the last, which gets the remainder.
 - An agent with an owner cannot agree to, or be funded for, a pact beyond its limits. Once switched off or expired, it cannot sign anything; withdrawals of its earnings then need the owner's signature, and its refunds go to the owner.
 - Activation and every payment call the Diana bridge at `0x0901`. A failed bridge call or an empty receipt reverts the whole transaction. The transaction fee can still apply to a mined revert.
 - There is no contract owner, operator withdrawal, pause, or upgrade.
