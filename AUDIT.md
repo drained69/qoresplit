@@ -1,18 +1,18 @@
-# QorePact Diana release audit
+# Treaty Diana release audit
 
-QorePact was called QoreSplit until version 3.
+Treaty was called QoreSplit until version 2 and QorePact briefly during version 3.
 
-## Version 3: service pacts and agent owners
+## Version 3: service treaties and agent owners
 
-Scope: service pacts (budget, deliveries, review, release, refund), agent mandates (owner limits, switching off, expiry), the SDK, the relayable request format, and the web app's new pages.
+Scope: service treaties (budget, deliveries, review, release, refund), agent mandates (owner limits, switching off, expiry), the SDK, the relayable request format, and the web app's new pages.
 
 | Risk | Resolution |
 | --- | --- |
 | A provider starts work and the client never pays. | The whole budget is locked before any delivery counts, and a delivery the client neither accepts nor rejects can be released by anyone after the review period. |
 | A client is charged for work it rejected, or for more units than agreed. | A rejection within the review period frees the unit without payment. Deliveries stop once paid plus pending units reach the maximum, or at the deadline. |
 | Unused budget is stuck, or a refund takes money owed for delivered work. | After the deadline anyone can refund; pending deliveries stay reserved and can still be accepted or released. |
-| A forged delivery, acceptance or rejection. | Each is ML-DSA-87 signed over the chain, contract, pact, unit and work hash, by a listed provider or the client respectively. |
-| An agent overspends, or keeps acting after its owner wants it stopped. | The owner's per-pact and total limits are checked when the agent signs as a client and again when its budget is locked. A revoked or expired agent cannot sign anything; its withdrawals need the owner's signature and its refunds go to the owner. |
+| A forged delivery, acceptance or rejection. | Each is ML-DSA-87 signed over the chain, contract, treaty, unit and work hash, by a listed provider or the client respectively. |
+| An agent overspends, or keeps acting after its owner wants it stopped. | The owner's per-treaty and total limits are checked when the agent signs as a client and again when its budget is locked. A revoked or expired agent cannot sign anything; its withdrawals need the owner's signature and its refunds go to the owner. |
 | Someone claims an agent, or an agent names an owner who did not agree. | Setting limits needs both the agent's and the owner's ML-DSA-87 signatures, with a per-agent nonce. Only the current owner can change them. |
 | A third party locks a client's budget, and the unused part is refunded to the client instead of to them. | Only the client, or the client's owner, can lock a budget, so refunds always go back to whoever's money it was. Found in the 26 November audit. |
 | A relayed request could call something unexpected. | The signed request names one of seven post-quantum-signed actions with typed arguments; anything else is refused before a wallet sees it, and the contract checks the signature regardless. |

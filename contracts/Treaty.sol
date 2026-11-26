@@ -17,11 +17,11 @@ interface IQorePQC {
         external view returns (bool registered, uint8 algorithmId, bytes memory pubkey, bool possessionProven);
 }
 
-/// @title QorePact
+/// @title Treaty
 /// @notice Post-quantum agreements between people and AI agents. The contract holds
 /// the money and moves it only as every party agreed.
 ///
-/// Two kinds of pact share one consent and payout system:
+/// Two kinds of treaty share one consent and payout system:
 /// - Revenue share: anyone pays a fixed price; every payment is split between the parties.
 /// - Service: a client locks a budget; a provider (or a team) delivers units of work;
 ///   each accepted delivery pays one unit, a delivery the client ignores pays itself after
@@ -33,9 +33,9 @@ interface IQorePQC {
 /// quantum-broken secp256k1 key alone moves nothing.
 ///
 /// An agent can have a human owner with limits the contract enforces: the largest budget
-/// per pact, the total it may commit, and an expiry. The owner can switch the agent off;
+/// per treaty, the total it may commit, and an expiry. The owner can switch the agent off;
 /// from then on only the owner can move the agent's money, and refunds go to the owner.
-contract QorePact {
+contract Treaty {
     address constant BRIDGE = address(0x0901);
     IQorePQC constant PQC_VERIFY = IQorePQC(address(0x0a01));
     IQorePQC constant PQC_KEYS = IQorePQC(address(0x0a02));
@@ -46,11 +46,11 @@ contract QorePact {
     uint256 public constant MIN_REVIEW = 60;
     uint256 public constant MAX_REVIEW = 30 days;
     uint256 private constant BPS = 10_000;
-    bytes32 public constant TERMS_DOMAIN = keccak256("qorepact.terms.v3");
-    bytes32 public constant SERVICE_DOMAIN = keccak256("qorepact.service.v3");
-    bytes32 public constant AGREEMENT_DOMAIN = keccak256("qorepact.agreement.v3");
-    bytes32 public constant RECEIPT_DOMAIN = keccak256("qorepact.checkout.v3");
-    bytes32 public constant PAYMENT_DOMAIN = keccak256("qorepact.delivery.v3");
+    bytes32 public constant TERMS_DOMAIN = keccak256("treaty.terms.v3");
+    bytes32 public constant SERVICE_DOMAIN = keccak256("treaty.service.v3");
+    bytes32 public constant AGREEMENT_DOMAIN = keccak256("treaty.agreement.v3");
+    bytes32 public constant RECEIPT_DOMAIN = keccak256("treaty.checkout.v3");
+    bytes32 public constant PAYMENT_DOMAIN = keccak256("treaty.delivery.v3");
 
     enum Kind { RevenueShare, Service }
     enum Status { None, Pending, Active, Superseded, Cancelled }
@@ -74,7 +74,7 @@ contract QorePact {
         uint16[] shares;
         address[] signers;
         bytes nativeReply;
-        // Service pacts only.
+        // Service treaties only.
         address client;
         uint32 maxUnits;
         uint32 reviewPeriod;
@@ -96,7 +96,7 @@ contract QorePact {
         address owner;
         uint64 expiry;
         bool revoked;
-        uint128 maxPerPact;
+        uint128 maxPerTreaty;
         uint128 maxTotal;
         uint128 committed;
     }
@@ -152,7 +152,7 @@ contract QorePact {
         bytes32 commitment, uint256[] credits, bytes nativeReply
     );
     event Refunded(uint256 indexed id, address indexed to, uint256 amount);
-    event MandateSet(address indexed agent, address indexed owner, uint128 maxPerPact, uint128 maxTotal, uint64 expiry);
+    event MandateSet(address indexed agent, address indexed owner, uint128 maxPerTreaty, uint128 maxTotal, uint64 expiry);
     event MandateRevoked(address indexed agent, address indexed owner);
     event Withdrawn(address indexed recipient, address indexed to, uint256 amount, uint256 nonce);
 
@@ -172,14 +172,21 @@ contract QorePact {
     mapping(address => uint256[]) private memberships;
     mapping(address => uint256[]) private clientPacts;
 
-    constructor() {
+    /// The QoreChain chain ID that signatures name, as QoreSign message signing writes it
+    /// (for example "qorechain-diana"). Every message below is signed in that format, so the
+    /// QoreX wallet can sign it in a browser and agents can sign it with the SDK.
+    string public signingChain;
+
+    constructor(string memory chain) {
+        if (bytes(chain).length == 0 || bytes(chain).length > 64) revert InvalidTerms();
         deployBlock = block.number;
+        signingChain = chain;
     }
 
     // ---------------------------------------------------------------- terms
 
     /// Propose a revenue share. Nothing can be paid until every signer accepts it.
-    /// `previous` is zero for a new pact, or the active revenue share this version replaces.
+    /// `previous` is zero for a new treaty, or the active revenue share this version replaces.
     function propose(
         string calldata title, uint128 price, address[] calldata recipients, uint16[] calldata shares, uint256 previous
     ) external returns (uint256 id) {
@@ -199,7 +206,7 @@ contract QorePact {
         _finishProposal(id, keccak256(abi.encode(TERMS_DOMAIN, title, price, recipients, shares, previous)));
     }
 
-    /// Propose a service pact: `client` locks `unitPrice * maxUnits`, and each delivered and
+    /// Propose a service treaty: `client` locks `unitPrice * maxUnits`, and each delivered and
     /// accepted unit pays `unitPrice`, split between `providers` by `shares`.
     function proposeService(
         string calldata title, uint128 unitPrice, uint32 maxUnits, uint64 deadline, uint32 reviewPeriod,
@@ -222,9 +229,13 @@ contract QorePact {
         )));
     }
 
-    /// The exact bytes `signer` signs with ML-DSA-87 to accept agreement `id`.
+    /// The exact bytes `signer` signs with ML-DSA-87 to accept agreement `id`: readable text in the
+    /// QoreSign message format, so a person sees in QoreX exactly what they agree to.
     function termsMessage(uint256 id, address signer) public view returns (bytes memory) {
-        return abi.encodePacked("QorePact:terms:v3", block.chainid, address(this), id, signer, _get(id).termsHash);
+        return _signed(abi.encodePacked(
+            "Treaty: accept the terms of treaty #", _decimal(id), "\nterms ", _hex32(_get(id).termsHash),
+            "\nsigner ", _address(signer)
+        ));
     }
 
     /// Record `signer`'s acceptance. Anyone may submit it: the ML-DSA-87 signature,
@@ -278,13 +289,13 @@ contract QorePact {
         bytes32 commitment = keccak256(abi.encode(
             RECEIPT_DOMAIN, block.chainid, address(this), id, msg.sender, paymentId, msg.value, recipients, credits
         ));
-        bytes memory reply = _record("qorepact:", commitment);
+        bytes memory reply = _record("treaty:", commitment);
         emit Checkout(id, msg.sender, paymentId, msg.value, commitment, credits, reply);
     }
 
     // -------------------------------------------------------------- service
 
-    /// Lock the whole budget of an agreed service pact, before the deadline. Only the client, or
+    /// Lock the whole budget of an agreed service treaty, before the deadline. Only the client, or
     /// the client's owner when it is an agent, may fund it: unused budget is refunded to them.
     function fund(uint256 id) external payable {
         Agreement storage agreement = _service(id);
@@ -301,11 +312,14 @@ contract QorePact {
         emit Funded(id, msg.sender, budget);
     }
 
-    /// The bytes a provider signs to deliver `deliverable` as unit `unit` of pact `id`.
+    /// The bytes a provider signs to deliver `deliverable` as unit `unit` of treaty `id`.
     function deliveryMessage(uint256 id, uint256 unit, address provider, bytes32 deliverable)
         public view returns (bytes memory)
     {
-        return abi.encodePacked("QorePact:deliver:v3", block.chainid, address(this), id, unit, provider, deliverable);
+        return _signed(abi.encodePacked(
+            "Treaty: deliver unit ", _decimal(unit), " of treaty #", _decimal(id), "\nwork ", _hex32(deliverable),
+            "\nprovider ", _address(provider)
+        ));
     }
 
     /// Submit one unit of work, identified by the hash of what was delivered.
@@ -328,10 +342,10 @@ contract QorePact {
 
     /// The bytes the client signs to accept (`accepted` true) or reject a delivery.
     function reviewMessage(uint256 id, uint256 unit, bool accepted) public view returns (bytes memory) {
-        bytes memory label = accepted ? bytes("QorePact:accept:v3") : bytes("QorePact:reject:v3");
-        return abi.encodePacked(
-            label, block.chainid, address(this), id, unit, deliveryLog[id][unit].deliverable
-        );
+        return _signed(abi.encodePacked(
+            accepted ? bytes("Treaty: accept delivery ") : bytes("Treaty: reject delivery "), _decimal(unit),
+            " of treaty #", _decimal(id), "\nwork ", _hex32(deliveryLog[id][unit].deliverable)
+        ));
     }
 
     /// The client accepts a delivery, which pays one unit.
@@ -399,41 +413,44 @@ contract QorePact {
     }
 
     /// The bytes both the agent and its owner sign to set the agent's limits.
-    function mandateMessage(address agent, address owner, uint128 maxPerPact, uint128 maxTotal, uint64 expiry)
+    function mandateMessage(address agent, address owner, uint128 maxPerTreaty, uint128 maxTotal, uint64 expiry)
         public view returns (bytes memory)
     {
-        return abi.encodePacked(
-            "QorePact:mandate:v3", block.chainid, address(this), agent, owner, maxPerPact, maxTotal, expiry,
-            mandateNonces[agent]
-        );
+        return _signed(abi.encodePacked(
+            "Treaty: agent ", _address(agent), " accepts owner ", _address(owner),
+            "\nlimits ", _qor(maxPerTreaty), " QOR per treaty, ", _qor(maxTotal), " QOR in total",
+            "\nuntil ", _decimal(expiry), "\nchange #", _decimal(mandateNonces[agent])
+        ));
     }
 
     /// Put an agent under an owner's limits. The agent and the owner both sign, so nobody can
     /// claim an agent, and no agent can pick an owner who did not agree. Only the current owner
     /// can set new limits later.
     function setMandate(
-        address agent, address owner, uint128 maxPerPact, uint128 maxTotal, uint64 expiry,
+        address agent, address owner, uint128 maxPerTreaty, uint128 maxTotal, uint64 expiry,
         bytes calldata agentSignature, bytes calldata ownerSignature
     ) external {
         Mandate storage mandate = mandates[agent];
         if (agent == address(0) || owner == address(0) || agent == owner || expiry <= block.timestamp ||
-            maxTotal == 0 || maxPerPact > maxTotal || (mandate.owner != address(0) && mandate.owner != owner)) {
+            maxTotal == 0 || maxPerTreaty > maxTotal || (mandate.owner != address(0) && mandate.owner != owner)) {
             revert InvalidMandate();
         }
-        bytes memory message = mandateMessage(agent, owner, maxPerPact, maxTotal, expiry);
+        bytes memory message = mandateMessage(agent, owner, maxPerTreaty, maxTotal, expiry);
         _requirePqcSignature(agent, agentSignature, message);
         _requirePqcSignature(owner, ownerSignature, message);
         mandateNonces[agent] += 1;
         mandate.owner = owner;
-        mandate.maxPerPact = maxPerPact;
+        mandate.maxPerTreaty = maxPerTreaty;
         mandate.maxTotal = maxTotal;
         mandate.expiry = expiry;
         mandate.revoked = false;
-        emit MandateSet(agent, owner, maxPerPact, maxTotal, expiry);
+        emit MandateSet(agent, owner, maxPerTreaty, maxTotal, expiry);
     }
 
     function revokeMessage(address agent) public view returns (bytes memory) {
-        return abi.encodePacked("QorePact:revoke:v3", block.chainid, address(this), agent, mandateNonces[agent]);
+        return _signed(abi.encodePacked(
+            "Treaty: owner switches off agent ", _address(agent), "\nchange #", _decimal(mandateNonces[agent])
+        ));
     }
 
     /// The owner switches the agent off. From then on the agent cannot sign anything here,
@@ -468,7 +485,10 @@ contract QorePact {
     function withdrawalMessage(address recipient, address to, uint256 amount, uint256 nonce)
         public view returns (bytes memory)
     {
-        return abi.encodePacked("QorePact:withdraw:v3", block.chainid, address(this), recipient, to, amount, nonce);
+        return _signed(abi.encodePacked(
+            "Treaty: withdraw ", _qor(amount), " QOR earned by ", _address(recipient), "\nto ", _address(to),
+            "\nwithdrawal #", _decimal(nonce)
+        ));
     }
 
     /// Pay out earnings. Anyone may submit; only an ML-DSA-87 signature from
@@ -502,8 +522,8 @@ contract QorePact {
         return memberships[account];
     }
 
-    /// Service pacts `account` agreed to pay for.
-    function pactsAsClient(address account) external view returns (uint256[] memory) {
+    /// Service treaties `account` agreed to pay for.
+    function treatiesAsClient(address account) external view returns (uint256[] memory) {
         return clientPacts[account];
     }
 
@@ -562,7 +582,7 @@ contract QorePact {
         if (agreement.kind == Kind.Service) clientPacts[agreement.client].push(id);
 
         bytes32 commitment = agreementCommitment(id);
-        bytes memory reply = _record("qorepact-terms:", commitment);
+        bytes memory reply = _record("treaty-terms:", commitment);
         agreement.nativeReply = reply;
         emit Activated(id, commitment, reply);
     }
@@ -577,7 +597,7 @@ contract QorePact {
         bytes32 commitment = keccak256(abi.encode(
             PAYMENT_DOMAIN, block.chainid, address(this), id, unit, delivery.deliverable, agreement.recipients, credits
         ));
-        bytes memory reply = _record("qorepact-pay:", commitment);
+        bytes memory reply = _record("treaty-pay:", commitment);
         emit Paid(id, unit, how, commitment, credits, reply);
     }
 
@@ -610,7 +630,7 @@ contract QorePact {
         Mandate storage mandate = mandates[agent];
         if (mandate.owner == address(0)) return;
         if (mandate.revoked || block.timestamp > mandate.expiry) revert AgentNotAuthorized();
-        if (budget > mandate.maxPerPact || mandate.committed + budget > mandate.maxTotal) revert MandateLimitExceeded();
+        if (budget > mandate.maxPerTreaty || mandate.committed + budget > mandate.maxTotal) revert MandateLimitExceeded();
     }
 
     /// A signature from `account` acting for itself: refused once its owner switched it off.
@@ -662,6 +682,52 @@ contract QorePact {
     function _containsCalldata(address[] calldata list, address account) private pure returns (bool) {
         for (uint256 i; i < list.length; ++i) if (list[i] == account) return true;
         return false;
+    }
+
+    /// QoreSign message signing (message-signing-v1): the ML-DSA-87 key signs
+    /// "qorechain-msg-v1|" + chain + "|" + the message. The message names this contract and chain.
+    function _signed(bytes memory text) private view returns (bytes memory) {
+        return abi.encodePacked(
+            "qorechain-msg-v1|", signingChain, "|", text,
+            "\ncontract ", _address(address(this)), "\nchain ", _decimal(block.chainid)
+        );
+    }
+
+    function _address(address account) private pure returns (bytes memory) {
+        return abi.encodePacked("0x", _hexBytes(abi.encodePacked(account)));
+    }
+
+    function _hex32(bytes32 value) private pure returns (bytes memory) {
+        return abi.encodePacked("0x", _hex(value));
+    }
+
+    function _hexBytes(bytes memory data) private pure returns (bytes memory result) {
+        bytes16 alphabet = "0123456789abcdef";
+        result = new bytes(data.length * 2);
+        for (uint256 i; i < data.length; ++i) {
+            result[2 * i] = alphabet[uint8(data[i]) >> 4];
+            result[2 * i + 1] = alphabet[uint8(data[i]) & 15];
+        }
+    }
+
+    function _decimal(uint256 value) private pure returns (bytes memory text) {
+        if (value == 0) return "0";
+        uint256 digits;
+        for (uint256 v = value; v != 0; v /= 10) ++digits;
+        text = new bytes(digits);
+        for (; value != 0; value /= 10) text[--digits] = bytes1(uint8(48 + value % 10));
+    }
+
+    /// A wei amount in QOR, without trailing zeros: 1.6, 10, 0.000001.
+    function _qor(uint256 amount) private pure returns (bytes memory) {
+        uint256 fraction = amount % 1e18;
+        if (fraction == 0) return _decimal(amount / 1e18);
+        bytes memory digits = _decimal(fraction + 1e18); // "1" followed by 18 digits
+        uint256 end = digits.length;
+        while (digits[end - 1] == "0") --end;
+        bytes memory tail = new bytes(end - 1);
+        for (uint256 i = 1; i < end; ++i) tail[i - 1] = digits[i];
+        return abi.encodePacked(_decimal(amount / 1e18), ".", tail);
     }
 
     function _hex(bytes32 value) private pure returns (bytes memory result) {

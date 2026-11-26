@@ -1,11 +1,12 @@
 import './style.css';
 import { formatEther } from 'viem';
 import {
-  address, chainTime, checkWindow, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
+  address, chainTime, checkWindow, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
   getRefundable, getStatement, getUnitPayments, getWithdrawals, parsePrice, parseRequest, parseShare, pqcKeyStatus,
   requestWallet, selectWallet, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
 } from './chain.js';
-import { MAX_PARTIES } from './protocol.js';
+import { MAX_PARTIES, deliverableHash } from './protocol.js';
+import { qorexAvailable, signWithQorex } from './qorex.js';
 
 const content = document.querySelector('#content');
 const status = document.querySelector('#status');
@@ -72,7 +73,7 @@ function attachWalletEvents(selected) {
 async function connect() {
   if (!provider) {
     provider = selectWallet();
-    if (!provider) throw new Error('Open QorePact in a browser with MetaMask or a compatible EVM wallet.');
+    if (!provider) throw new Error('Open Treaty in a browser with MetaMask or a compatible EVM wallet.');
     attachWalletEvents(provider);
   }
   account = await requestWallet(provider);
@@ -140,7 +141,7 @@ function splitCard(terms, heading = 'Payment breakdown', exactCredits, note = ''
 }
 
 function setupNotice() {
-  return address ? '' : '<div class="notice"><strong>Preview mode</strong><p>Connect a Diana deployment to propose pacts, move money, and verify live receipts.</p></div>';
+  return address ? '' : '<div class="notice"><strong>Preview mode</strong><p>Connect a Diana deployment to propose treaties, move money, and verify live receipts.</p></div>';
 }
 
 function command(text) {
@@ -155,12 +156,29 @@ async function show(fragment, message) {
   else location.hash = fragment;
 }
 
+const qorexHint = '<p class="muted qorex-hint">Install the <a href="https://qorechain.io" target="_blank" rel="noreferrer">QoreX wallet</a> to sign here with your post-quantum key, or use the signing tool.</p>';
+
+/**
+ * Sign a Treaty message with QoreX as `expected`, then send the call from the connected EVM wallet.
+ * `messageCall` names the contract view that returns the exact bytes; `args(signature)` builds the call.
+ */
+function qorexAction({ expected, messageCall, action, args, done }) {
+  return () => void run(async (route) => {
+    const signingChain = await getSigningChain();
+    const message = await read(...messageCall);
+    alert('Approve the message in QoreX…');
+    const { signature } = await signWithQorex(message, { chainId: signingChain, signingChain, expected });
+    const receipt = await write(action, args(signature));
+    if (location.href === route) await done(receipt);
+  });
+}
+
 /** A form that relays a signed request from the signing tool or an agent. Any connected wallet can send it. */
 function relayForm(hint) {
   return `<section class="card action relay"><h2>Submit a signature</h2>
     <p>${hint} The signature is checked on chain against the signer’s registered ML-DSA-87 key, so the wallet that sends it does not matter.</p>
     <form class="relay-form"><div class="field"><label for="signed-request">Signed request from <code>--out</code> or an agent</label>
-    <textarea id="signed-request" name="request" rows="5" spellcheck="false" placeholder='{"kind":"qorepact-signed-request", …}' required></textarea></div>
+    <textarea id="signed-request" name="request" rows="5" spellcheck="false" placeholder='{"kind":"treaty-signed-request", …}' required></textarea></div>
     <button class="secondary" type="submit" ${address ? '' : 'disabled'}>Send with my wallet</button></form></section>`;
 }
 
@@ -176,7 +194,7 @@ function bindRelay() {
         if (request.action === 'sign') {
           const activated = getEvent(receipt, 'Activated', { optional: true });
           await show(contractRoute('agreement', first),
-            activated ? 'Final signature recorded. The pact is live.' : 'Signature recorded for ' + short(request.args[1]) + '.');
+            activated ? 'Final signature recorded. The treaty is live.' : 'Signature recorded for ' + short(request.args[1]) + '.');
         } else if (request.action === 'deliver') {
           const { unit } = getEvent(receipt, 'Delivered');
           await show(contractRoute('agreement', first), 'Delivery ' + unit + ' recorded. The client can review it now.');
@@ -238,9 +256,9 @@ function partyRows(form, { list, add, totalLabel, preview, minimum, sample, head
 }
 
 function modeTabs(current) {
-  return `<nav class="tabs" aria-label="Kind of pact">
+  return `<nav class="tabs" aria-label="Kind of treaty">
     <a href="#create" ${current === 'revenue' ? 'aria-current="page"' : ''}>Revenue share</a>
-    <a href="#service" ${current === 'service' ? 'aria-current="page"' : ''}>Service pact</a></nav>`;
+    <a href="#service" ${current === 'service' ? 'aria-current="page"' : ''}>Service treaty</a></nav>`;
 }
 
 const howItWorks = `<section class="card process"><h2>Why it holds</h2><ul>
@@ -250,20 +268,20 @@ const howItWorks = `<section class="card process"><h2>Why it holds</h2><ul>
   <li>${icon('4')}<span><strong>Owners keep agents on a leash</strong><small>Spending limits the contract enforces, and an off switch.</small></span></li>
 </ul></section>`;
 
-const intro = `<h1>Pacts between people and AI agents.<br><em>Nobody holds the money.</em></h1>
+const intro = `<h1>Treaties between people and AI agents.<br><em>Nobody holds the money.</em></h1>
   <p>Every party signs the terms with a post-quantum key. The contract holds the money and pays out only as agreed, so a stolen wallet key gets nothing, and an agent cannot spend past the limits its owner set.</p>`;
 
 async function createPage(previousId, revision) {
   let previous;
   if (previousId !== undefined) {
-    if (!validId(previousId)) throw new Error('Invalid pact number.');
+    if (!validId(previousId)) throw new Error('Invalid treaty number.');
     previous = await getAgreement(BigInt(previousId));
     if (revision !== rendering) return;
     if (previous.state !== 'Active' || previous.service) throw new Error('Only a live revenue share can be changed.');
   }
   content.innerHTML = `
     <div class="intro">${previous
-      ? `<h1>Change pact #${previousId}</h1><p>The new version goes live only when everyone on it <em>and</em> everyone on #${previousId} signs. Until then, #${previousId} keeps taking payments.</p>`
+      ? `<h1>Change treaty #${previousId}</h1><p>The new version goes live only when everyone on it <em>and</em> everyone on #${previousId} signs. Until then, #${previousId} keeps taking payments.</p>`
       : intro}</div>
     ${setupNotice()}${previous ? '' : modeTabs('revenue')}
     <div class="layout">
@@ -277,7 +295,7 @@ async function createPage(previousId, revision) {
           <div id="recipients"></div>
           <button type="button" id="add" class="text-button">+ Add party</button>
           <div class="form-foot"><p>Each party, person or agent, needs a QoreChain account with a registered ML-DSA-87 key. Nobody can be paid, or added, without signing.</p>
-          <button class="primary" type="submit" ${address ? '' : 'disabled'}>${previous ? 'Propose this change' : 'Propose pact'}</button></div>
+          <button class="primary" type="submit" ${address ? '' : 'disabled'}>${previous ? 'Propose this change' : 'Propose treaty'}</button></div>
         </form>
       </section>
       <aside><div id="split-preview"></div>${howItWorks}</aside>
@@ -333,7 +351,7 @@ function servicePage() {
           <div id="recipients"></div>
           <button type="button" id="add" class="text-button">+ Add provider</button>
           <div class="form-foot"><p>The client and every provider sign these terms with their ML-DSA-87 keys. If the client is an agent with an owner, its owner’s limits apply.</p>
-          <button class="primary" type="submit" ${address ? '' : 'disabled'}>Propose pact</button></div>
+          <button class="primary" type="submit" ${address ? '' : 'disabled'}>Propose treaty</button></div>
         </form>
       </section>
       <aside><div id="split-preview"></div>${howItWorks}</aside>
@@ -388,7 +406,9 @@ async function serviceSection(id, agreement, revision) {
     return `<tr><td>${delivery.unit}</td><td title="${escape(delivery.provider)}">${short(delivery.provider)}</td>
       <td><code title="${escape(delivery.deliverable)}">${short(delivery.deliverable)}</code></td>
       <td>${deliveryLabel[delivery.state]}${delivery.state === 'Pending' ? '<small>' + (overdue ? 'Review period over' : 'Review until ' + when(reviewEnds)) + '</small>' : ''}</td>
-      <td>${overdue ? `<button class="secondary small" type="button" data-release="${delivery.unit}">Release payment</button>` : ''}</td></tr>`;
+      <td>${overdue ? `<button class="secondary small" type="button" data-release="${delivery.unit}">Release payment</button>` : ''}
+      ${delivery.state === 'Pending' && qorexAvailable() ? `<button class="secondary small" type="button" data-qorex-review="accept" data-unit="${delivery.unit}">Accept with QoreX</button>
+        ${overdue ? '' : `<button class="secondary small" type="button" data-qorex-review="reject" data-unit="${delivery.unit}">Reject with QoreX</button>`}` : ''}</td></tr>`;
   }).join('');
   let main;
   if (agreement.state === 'Active' && !agreement.funded) {
@@ -406,6 +426,8 @@ async function serviceSection(id, agreement, revision) {
       ${pastDeadline
         ? (refundable ? `<p>The deadline passed. ${formatQor(refundable)} of unused budget can go back now.</p><button class="primary" id="refund" type="button">Return ${formatQor(refundable)}</button>` : '<p>The deadline passed and the budget is settled.</p>')
         : `<p>A provider delivers one unit; only the hash of the work goes on chain. The client accepts or rejects it within ${duration(agreement.reviewPeriod)}, or it pays itself.</p>
+          ${qorexAvailable() ? `<form id="deliver-form" class="deliver-form"><div class="field"><label for="work">Deliver one unit as a provider</label>
+            <input id="work" name="work" type="file" required></div><button class="primary" type="submit">Deliver with QoreX</button></form>` : qorexHint}
           ${command('npm run pq -- deliver ' + id + ' --file work.zip')}
           ${command('npm run pq -- accept ' + id + ' <delivery>')}`}</section>`;
   }
@@ -416,7 +438,7 @@ async function serviceSection(id, agreement, revision) {
 }
 
 async function agreementPage(id, revision) {
-  if (!validId(id)) throw new Error('Invalid pact number.');
+  if (!validId(id)) throw new Error('Invalid treaty number.');
   const agreementId = BigInt(id);
   const agreement = await getAgreement(agreementId);
   const [keys, verification, service] = await Promise.all([
@@ -434,7 +456,9 @@ async function agreementPage(id, revision) {
       : !key.registered ? 'No ML-DSA-87 key registered yet' : !key.proven ? 'Key registered without proof of possession' : 'ML-DSA-87 key registered';
     return `<li class="${signed ? 'signed' : ''}"><span class="check" aria-hidden="true">${signed ? '✓' : ''}</span>
       <span title="${escape(signer)}">${escape(signer)}<small>${roleOf(agreement, signer)} · ${signed ? 'Signed' : 'Not signed yet'} · ${keyNote}</small></span>
-      <a class="small-link" href="#${contractRoute('statement', signer)}">Statement</a></li>`;
+      ${!signed && agreement.state === 'Pending' && qorexAvailable()
+        ? `<button class="secondary small" type="button" data-qorex-sign="${escape(signer)}">Sign with QoreX</button>`
+        : `<a class="small-link" href="#${contractRoute('statement', signer)}">Statement</a>`}</li>`;
   }).join('');
   const isParty = account && (same(account, agreement.proposer) || agreement.signers.some((signer) => same(signer, account)));
   const nativeLine = verification.native
@@ -445,7 +469,8 @@ async function agreementPage(id, revision) {
   if (agreement.state === 'Pending') {
     main = `<section class="card action"><div class="tag warn">${label} · ${signedCount} of ${agreement.signers.length}</div>
       <h2>Every party signs these terms</h2>
-      <p>Send this page to every party. People sign with the QorePact signing tool on their own computer; agents sign with the QorePact SDK. Browser wallets cannot make ML-DSA-87 signatures yet.</p>
+      <p>Send this page to every party. People sign with QoreX right here (the button next to their address) or with the Treaty signing tool; agents sign with the Treaty SDK. Every signature is ML-DSA-87, checked on chain.</p>
+      ${qorexAvailable() ? '' : qorexHint}
       ${command('npm run pq -- sign ' + id)}
       <p>To send a signature from another wallet, add <code>--out signature.json</code> and paste the file below.</p>
       <div class="actions"><button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('agreement', id)))}">Copy this page’s link</button>
@@ -461,11 +486,11 @@ async function agreementPage(id, revision) {
       <a class="secondary" href="#${contractRoute('create', id)}">Propose a change</a></div>${nativeLine}</section>`;
   } else if (agreement.state === 'Superseded') {
     main = `<section class="card action"><div class="tag muted">${label}</div><h2>This version takes no more payments</h2>
-      <p>All parties signed pact #${agreement.successor}, which replaced this one. Its ${plural(agreement.sales, 'past payment')} stay credited.</p>
-      <a class="primary" href="#${contractRoute('agreement', agreement.successor)}">Open pact #${agreement.successor}</a></section>`;
+      <p>All parties signed treaty #${agreement.successor}, which replaced this one. Its ${plural(agreement.sales, 'past payment')} stay credited.</p>
+      <a class="primary" href="#${contractRoute('agreement', agreement.successor)}">Open treaty #${agreement.successor}</a></section>`;
   } else {
     main = `<section class="card action"><div class="tag muted">${label}</div><h2>This proposal was cancelled</h2><p>It never went live and moved no money.</p>
-      <a class="secondary" href="#create">Propose a new pact</a></section>`;
+      <a class="secondary" href="#create">Propose a new treaty</a></section>`;
   }
 
   const termsCard = agreement.service
@@ -475,7 +500,7 @@ async function agreementPage(id, revision) {
   const relay = agreement.state === 'Pending'
     ? relayForm('Paste a signed request a party saved with the signing tool, or an agent produced.')
     : (agreement.service && agreement.state === 'Active' && agreement.funded ? relayForm('Paste a delivery, acceptance or rejection signed by a provider or the client.') : '');
-  content.innerHTML = `<div class="intro"><p class="eyebrow">${agreement.service ? 'Service pact' : 'Revenue share'} #${id}</p><h1>${escape(agreement.title)}</h1>
+  content.innerHTML = `<div class="intro"><p class="eyebrow">${agreement.service ? 'Service treaty' : 'Revenue share'} #${id}</p><h1>${escape(agreement.title)}</h1>
     <p>Proposed by <span title="${escape(agreement.proposer)}">${short(agreement.proposer)}</span>${
       agreement.previous ? ` · Replaces <a href="#${contractRoute('agreement', agreement.previous)}">#${agreement.previous}</a>` : ''}</p></div>
     <div class="layout"><div class="stack">${main}${service.deliveriesCard ?? ''}
@@ -500,6 +525,47 @@ async function agreementPage(id, revision) {
     const { to, amount } = getEvent(receipt, 'Refunded');
     if (location.href === route) await show(contractRoute('agreement', id), formatQor(amount) + ' returned to ' + short(to) + '.');
   });
+  for (const button of content.querySelectorAll('[data-qorex-sign]')) {
+    const signer = button.dataset.qorexSign;
+    button.onclick = qorexAction({
+      expected: signer, messageCall: ['termsMessage', [agreementId, signer]], action: 'sign',
+      args: (signature) => [agreementId, signer, signature],
+      done: (receipt) => show(contractRoute('agreement', id), getEvent(receipt, 'Activated', { optional: true })
+        ? 'Final signature recorded. The treaty is live.' : 'Your signature is recorded.'),
+    });
+  }
+  for (const button of content.querySelectorAll('[data-qorex-review]')) {
+    const unit = BigInt(button.dataset.unit);
+    const accepted = button.dataset.qorexReview === 'accept';
+    button.onclick = qorexAction({
+      expected: agreement.client, messageCall: ['reviewMessage', [agreementId, unit, accepted]], action: accepted ? 'accept' : 'reject',
+      args: (signature) => [agreementId, unit, signature],
+      done: () => show(contractRoute('agreement', id), 'Delivery ' + unit + (accepted ? ' accepted and paid.' : ' rejected.')),
+    });
+  }
+  const deliverForm = document.querySelector('#deliver-form');
+  if (deliverForm) {
+    deliverForm.onsubmit = (event) => {
+      event.preventDefault();
+      void run(async (route) => {
+        const file = deliverForm.querySelector('#work').files[0];
+        if (!file) throw new Error('Choose the file you deliver.');
+        const work = deliverableHash(new Uint8Array(await file.arrayBuffer()));
+        const signingChain = await getSigningChain();
+        const { qorexAccount } = await import('./qorex.js');
+        const { address: provider } = await qorexAccount(signingChain);
+        if (!agreement.recipients.some((recipient) => same(recipient, provider))) {
+          throw new Error('QoreX is on ' + provider + ', which is not a provider in this treaty.');
+        }
+        const { deliveries } = await read('getAgreement', [agreementId]);
+        const message = await read('deliveryMessage', [agreementId, BigInt(deliveries), provider, work]);
+        alert('Approve the delivery in QoreX…');
+        const { signature } = await signWithQorex(message, { chainId: signingChain, signingChain, expected: provider });
+        const receipt = await write('deliver', [agreementId, provider, work, signature]);
+        if (location.href === route) await show(contractRoute('agreement', id), 'Delivery ' + getEvent(receipt, 'Delivered').unit + ' recorded. Work hash ' + work + '.');
+      });
+    };
+  }
   for (const button of content.querySelectorAll('[data-release]')) {
     button.onclick = () => void run(async (route) => {
       await write('release', [agreementId, BigInt(button.dataset.release)]);
@@ -545,7 +611,7 @@ async function payPage(id, revision) {
     ${splitCard(agreement, 'Parties', credits)}</div>`;
   bindCopy();
   let reference;
-  const pendingKey = 'qorepact:pending:' + address + ':' + id;
+  const pendingKey = 'treaty:pending:' + address + ':' + id;
   let pending;
   try {
     const stored = JSON.parse(localStorage.getItem(pendingKey));
@@ -629,10 +695,11 @@ function mandateCard(who, mandate, off) {
   return `<section class="card action"><div class="tag ${off ? 'muted' : 'ok'}">${off ? (mandate.revoked ? 'Agent switched off by its owner' : 'Agent’s mandate expired') : 'Agent with an owner'}</div>
     <h2>Owner’s limits</h2>
     <dl class="totals"><dt>Owner</dt><dd><a href="#${contractRoute('statement', mandate.owner)}" title="${escape(mandate.owner)}">${short(mandate.owner)}</a></dd>
-    <dt>Per pact</dt><dd>${formatQor(mandate.maxPerPact)}</dd><dt>Committed</dt><dd>${formatQor(mandate.committed)} of ${formatQor(mandate.maxTotal)}</dd>
+    <dt>Per treaty</dt><dd>${formatQor(mandate.maxPerTreaty)}</dd><dt>Committed</dt><dd>${formatQor(mandate.committed)} of ${formatQor(mandate.maxTotal)}</dd>
     <dt>Until</dt><dd>${when(mandate.expiry)}</dd></dl>
     <p>${off ? 'This agent can no longer sign anything here. Only its owner can move its earnings, and unused budgets go back to the owner:'
-      : 'The contract refuses any pact that would take this agent past these limits. The owner can switch it off at any time:'}</p>
+      : 'The contract refuses any treaty that would take this agent past these limits. The owner can switch it off at any time:'}</p>
+    ${!off && qorexAvailable() ? '<button class="secondary" id="qorex-revoke" type="button">Switch off with QoreX (owner)</button>' : ''}
     ${command(off ? 'npm run pq -- withdraw all --for ' + who : 'npm run pq -- revoke ' + who)}</section>`;
 }
 
@@ -646,23 +713,41 @@ async function statementPage(who, revision) {
   const switchedOff = !same(statement.signer, who);
   content.innerHTML = `<div class="intro"><h1>Statement</h1><p title="${escape(who)}">${escape(who)}</p></div>
     <div class="layout"><div class="stack"><section class="card action"><div class="tag ${statement.consistent ? 'ok' : 'warn'}">${statement.consistent
-      ? 'Balances match the signed pacts' : 'Balances do not reconcile'}</div>
+      ? 'Balances match the signed treaties' : 'Balances do not reconcile'}</div>
       <h2>Available to withdraw</h2><p class="amount">${formatQor(statement.available)}</p>
       <dl class="totals"><dt>Earned</dt><dd>${formatQor(statement.earned)}</dd><dt>Withdrawn</dt><dd>${formatQor(statement.withdrawn)}</dd><dt>Withdrawals</dt><dd>${statement.nonce}</dd></dl>
       <p>${switchedOff ? 'This agent was switched off, so only its owner’s ML-DSA-87 signature can move these earnings.' : 'Earnings leave only with this account’s ML-DSA-87 signature. On their own computer they run:'}</p>
       ${command(switchedOff ? 'npm run pq -- withdraw all --for ' + who : 'npm run pq -- withdraw all')}
+      ${statement.available && qorexAvailable() ? `<button class="primary" id="qorex-withdraw" type="button">Withdraw ${formatQor(statement.available)} with QoreX</button>` : ''}
       <p>Add <code>--to 0x…</code> to send elsewhere, or <code>--out withdrawal.json</code> to submit from any wallet below.</p>
       <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('statement', who)))}">Copy statement link</button></section>
       ${statement.mandate ? mandateCard(who, statement.mandate, switchedOff) : ''}
       ${relayForm('Paste a withdrawal, or an owner’s limits or off switch, signed with the signing tool or an agent.')}</div>
     <div class="stack"><section class="card ledger"><h2>Earning from</h2>${rows
-      ? '<div class="table"><table><thead><tr><th>Pact</th><th>Share</th><th>Paid</th><th>Earned</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-      : '<p class="muted">No live pact has credited this address yet.</p>'}</section>
+      ? '<div class="table"><table><thead><tr><th>Treaty</th><th>Share</th><th>Paid</th><th>Earned</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<p class="muted">No live treaty has credited this address yet.</p>'}</section>
     ${statement.clientOf.length ? `<section class="card ledger"><h2>Paying for</h2><ul class="history">${statement.clientOf.map((id) =>
-      `<li><span>Service pact #${id}</span><a href="#${contractRoute('agreement', id)}">Open</a></li>`).join('')}</ul></section>` : ''}
+      `<li><span>Service treaty #${id}</span><a href="#${contractRoute('agreement', id)}">Open</a></li>`).join('')}</ul></section>` : ''}
     <section class="card ledger"><h2>Withdrawals</h2><div id="withdrawals"><p class="muted">Reading history…</p></div></section></div></div>`;
   bindCopy();
   bindRelay();
+  const qorexWithdraw = document.querySelector('#qorex-withdraw');
+  if (qorexWithdraw) {
+    qorexWithdraw.onclick = qorexAction({
+      expected: statement.signer,
+      messageCall: ['withdrawalMessage', [who, statement.signer, statement.available, statement.nonce]],
+      action: 'withdraw', args: (signature) => [who, statement.signer, statement.available, signature],
+      done: (receipt) => show(contractRoute('statement', who),
+        'Withdrew ' + formatQor(getEvent(receipt, 'Withdrawn').amount) + ' · ' + receipt.transactionHash),
+    });
+  }
+  const qorexRevoke = document.querySelector('#qorex-revoke');
+  if (qorexRevoke) {
+    qorexRevoke.onclick = qorexAction({
+      expected: statement.mandate.owner, messageCall: ['revokeMessage', [who]], action: 'revokeMandate',
+      args: (signature) => [who, signature], done: () => show(contractRoute('statement', who), 'The agent is switched off.'),
+    });
+  }
   void getWithdrawals(who).then((withdrawals) => {
     if (revision !== rendering) return;
     document.querySelector('#withdrawals').innerHTML = withdrawals.length
@@ -676,13 +761,13 @@ async function statementPage(who, revision) {
 }
 
 function submitPage() {
-  content.innerHTML = `<div class="intro"><h1>Submit a signature</h1><p>Send any post-quantum-signed action that a person made with the QorePact signing tool, or an agent made with the SDK: accepting terms, delivering work, reviewing it, withdrawing, or an owner setting limits or switching an agent off.</p></div>
+  content.innerHTML = `<div class="intro"><h1>Submit a signature</h1><p>Send any post-quantum-signed action that a person made with the Treaty signing tool, or an agent made with the SDK: accepting terms, delivering work, reviewing it, withdrawing, or an owner setting limits or switching an agent off.</p></div>
     ${setupNotice()}<div class="narrow">${relayForm('Paste the JSON request.')}</div>`;
   bindRelay();
 }
 
 function verifyPage() {
-  content.innerHTML = `<div class="intro"><h1>Verify a receipt</h1><p>Check a revenue-share payment against the record it wrote on QoreChain Native. Service payments are verified on their pact’s page.</p></div>
+  content.innerHTML = `<div class="intro"><h1>Verify a receipt</h1><p>Check a revenue-share payment against the record it wrote on QoreChain Native. Service payments are verified on their treaty’s page.</p></div>
     ${setupNotice()}<section class="card action narrow"><form id="verify-form"><div class="field">
     <label for="hash">Payment transaction hash</label><input id="hash" name="hash" placeholder="0x…" spellcheck="false" required>
     </div><button class="primary" type="submit" ${address ? '' : 'disabled'}>Verify receipt</button></form></section>`;
@@ -698,7 +783,7 @@ async function receiptPage(hash, revision) {
   if (!validHash(hash)) throw new Error('Invalid payment transaction hash.');
   const { receipt, payment, agreement, native, nativeError } = await verifyReceipt(hash);
   if (revision !== rendering) return;
-  content.innerHTML = `<div class="intro"><h1>Payment receipt</h1><p>${escape(agreement.title)} · <a href="#${contractRoute('agreement', payment.id)}">Pact #${payment.id}</a></p></div>
+  content.innerHTML = `<div class="intro"><h1>Payment receipt</h1><p>${escape(agreement.title)} · <a href="#${contractRoute('agreement', payment.id)}">Treaty #${payment.id}</a></p></div>
     <div class="layout"><section class="card action"><div class="tag ${native ? 'ok' : 'warn'}">${native ? 'Verified on EVM and Native' : 'EVM confirmed · Native unverified'}</div>
     <h2>${formatQor(payment.total)} credited</h2>
     <dl><dt>Payer</dt><dd>${escape(payment.payer)}</dd><dt>EVM block</dt><dd>${receipt.blockNumber}</dd><dt>Native receipt ID</dt><dd>${native ? escape(native.id) : 'Unverified'}</dd>
@@ -727,7 +812,7 @@ async function render() {
     else if (route === 'submit') submitPage();
     else if (['create', 'agreement', 'pay', 'receipt', 'statement'].includes(route)) {
       if (extra !== undefined || !address || deployment?.toLowerCase() !== address.toLowerCase()) {
-        throw new Error('This link requires its original QorePact Diana deployment.');
+        throw new Error('This link requires its original Treaty Diana deployment.');
       }
       content.innerHTML = '<div class="intro"><h1>Reading QoreChain</h1><p>Waiting for Diana testnet data…</p></div>';
       if (route === 'create') await createPage(parameter, revision);
@@ -744,7 +829,7 @@ async function render() {
     if (revision !== rendering) return;
     flash = undefined;
     content.innerHTML = '<div class="intro"><h1>Unable to load this page</h1><p>' +
-      escape(errorMessage(error)) + '</p><a class="secondary" href="#create">Back to QorePact</a></div>';
+      escape(errorMessage(error)) + '</p><a class="secondary" href="#create">Back to Treaty</a></div>';
   }
 }
 

@@ -1,7 +1,7 @@
-// QorePact SDK for agents and people: make, sign and settle post-quantum agreements.
+// Treaty SDK for agents and people: make, sign and settle post-quantum agreements.
 //
-//   import { QorePact } from './sdk/qorepact.mjs';
-//   const me = await QorePact.connect({ contract, mnemonic });
+//   import { Treaty } from './sdk/treaty.mjs';
+//   const me = await Treaty.connect({ contract, mnemonic });
 //   const id = await me.proposeService({ title, unitPrice: '2', maxUnits: 5, ... });
 //   await me.sign(id);
 //
@@ -23,10 +23,10 @@ import { loadSigner, registeredKey } from './pqc.mjs';
 export const DIANA = Object.freeze({
   chainId: 9800, rpc: 'https://evm-testnet.qore.host', rest: 'https://api-testnet.qore.host',
 });
-const artifact = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
+const artifact = JSON.parse(await readFile(new URL('../artifacts/Treaty.json', import.meta.url)));
 export const { abi } = artifact;
 
-/** A readable reason for a failed call, including QorePact's own errors. */
+/** A readable reason for a failed call, including Treaty's own errors. */
 export function explain(error) {
   if (error instanceof BaseError) {
     const revert = error.walk((cause) => cause instanceof ContractFunctionRevertedError);
@@ -39,7 +39,7 @@ export function explain(error) {
 const toWei = (value) => typeof value === 'bigint' ? value : parseEther(String(value));
 export const qor = (wei) => formatEther(wei) + ' QOR';
 
-export class QorePact {
+export class Treaty {
   /**
    * Connect an account. Keys come from `mnemonic` (+ `accountIndex`), or `privateKey` with
    * `recoveryCode`, or else the environment (QORE_MNEMONIC, or PRIVATE_KEY and QORE_PQC_RECOVERY_CODE).
@@ -49,8 +49,8 @@ export class QorePact {
     contract, rpc = process.env.QORE_EVM_RPC?.trim() || DIANA.rpc, rest = process.env.QORE_REST_URL?.trim() || DIANA.rest,
     mnemonic, accountIndex, privateKey, recoveryCode, signer: withSigner = true, verifyCode = true,
   } = {}) {
-    const configured = contract ?? process.env.QOREPACT_ADDRESS ?? process.env.VITE_QOREPACT_ADDRESS;
-    if (!isAddress(configured ?? '')) throw new Error('Set the QorePact contract address (VITE_QOREPACT_ADDRESS).');
+    const configured = contract ?? process.env.TREATY_ADDRESS ?? process.env.VITE_TREATY_ADDRESS;
+    if (!isAddress(configured ?? '')) throw new Error('Set the Treaty contract address (VITE_TREATY_ADDRESS).');
     const chain = defineChain({
       id: DIANA.chainId, name: 'QoreChain Diana', nativeCurrency: { name: 'Test QOR', symbol: 'QOR', decimals: 18 },
       rpcUrls: { default: { http: [rpc] } },
@@ -61,7 +61,7 @@ export class QorePact {
       const [chainId, code] = await Promise.all([client.getChainId(), client.getCode({ address })]);
       if (chainId !== chain.id) throw new Error('The RPC at ' + rpc + ' is not Diana (chain 9800).');
       if (code?.toLowerCase() !== artifact.runtime.toLowerCase()) {
-        throw new Error('The contract at ' + address + ' is not this QorePact build. Run npm run compile, or check the address.');
+        throw new Error('The contract at ' + address + ' is not this Treaty build. Run npm run compile, or check the address.');
       }
     }
     let signer;
@@ -71,10 +71,12 @@ export class QorePact {
         : process.env;
       signer = await loadSigner(env);
     }
-    return new QorePact({ chain, client, contract: address, rest, signer });
+    const signingChain = await client.readContract({ address, abi, functionName: 'signingChain' });
+    return new Treaty({ chain, client, contract: address, rest, signer, signingChain });
   }
 
-  constructor({ chain, client, contract, rest, signer }) {
+  constructor({ chain, client, contract, rest, signer, signingChain }) {
+    this.signingChain = signingChain;
     this.chain = chain;
     this.client = client;
     this.contract = contract;
@@ -120,7 +122,7 @@ export class QorePact {
   async statement(account = this.address) {
     const [earned, withdrawn, available, ids, clientIds] = await Promise.all([
       this.read('earned', [account]), this.read('withdrawn', [account]), this.read('claimable', [account]),
-      this.read('agreementsOf', [account]), this.read('pactsAsClient', [account]),
+      this.read('agreementsOf', [account]), this.read('treatiesAsClient', [account]),
     ]);
     const rows = await Promise.all(ids.map(async (id) => {
       const agreement = await this.agreement(id);
@@ -139,7 +141,7 @@ export class QorePact {
     return this.#event(receipt, 'Proposed').id;
   }
 
-  /** Propose a service pact. `deadline` is a Unix time in seconds; `reviewPeriod` in seconds. */
+  /** Propose a service treaty. `deadline` is a Unix time in seconds; `reviewPeriod` in seconds. */
   async proposeService({ title, unitPrice, maxUnits, deadline, reviewPeriod, client, providers, shares }) {
     const receipt = await this.#send('proposeService', [
       title, toWei(unitPrice), Number(maxUnits), BigInt(deadline), Number(reviewPeriod), client, providers, shares,
@@ -152,7 +154,7 @@ export class QorePact {
     return this.#send('checkout', [BigInt(id), reference], agreement.price);
   }
 
-  /** Lock a service pact's whole budget. */
+  /** Lock a service treaty's whole budget. */
   async fund(id) {
     const agreement = await this.agreement(id);
     return this.#send('fund', [BigInt(id)], agreement.budget);
@@ -173,7 +175,7 @@ export class QorePact {
     const index = agreement.signers.findIndex((value) => value.toLowerCase() === me.address.toLowerCase());
     if (index < 0) throw new Error(me.address + ' is not a signer of agreement #' + id + '.');
     if (agreement.signed[index]) throw new Error('You already signed agreement #' + id + '.');
-    const message = termsMessage({ chainId: this.chain.id, contract: this.contract, id, signer: me.address, hash: agreement.termsHash });
+    const message = termsMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, id, signer: me.address, hash: agreement.termsHash });
     await this.#same(message, 'termsMessage', [BigInt(id), me.address]);
     return this.#signed('sign', { id: BigInt(id), signer: me.address }, message, options);
   }
@@ -182,10 +184,10 @@ export class QorePact {
   async deliver(id, content, options = {}) {
     const me = this.#me();
     const agreement = await this.agreement(id);
-    if (!isService(agreement)) throw new Error('Agreement #' + id + ' is not a service pact.');
+    if (!isService(agreement)) throw new Error('Agreement #' + id + ' is not a service treaty.');
     const deliverable = options.hash ?? deliverableHash(content);
     const unit = BigInt(agreement.deliveries);
-    const message = deliveryMessage({ chainId: this.chain.id, contract: this.contract, id, unit, provider: me.address, deliverable });
+    const message = deliveryMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, id, unit, provider: me.address, deliverable });
     await this.#same(message, 'deliveryMessage', [BigInt(id), unit, me.address, deliverable]);
     const result = await this.#signed('deliver', { id: BigInt(id), provider: me.address, deliverable }, message, options);
     return options.relay ? result : { receipt: result, unit, deliverable };
@@ -197,9 +199,9 @@ export class QorePact {
   async #review(id, unit, accepted, options) {
     const me = this.#me();
     const [agreement, delivery] = await Promise.all([this.agreement(id), this.read('getDelivery', [BigInt(id), BigInt(unit)])]);
-    if (agreement.client.toLowerCase() !== me.address.toLowerCase()) throw new Error('Only the client of pact #' + id + ' reviews deliveries.');
-    if (DeliveryStatus[delivery.status] !== 'Pending') throw new Error('Delivery ' + unit + ' of pact #' + id + ' is not pending.');
-    const message = reviewMessage({ chainId: this.chain.id, contract: this.contract, id, unit, deliverable: delivery.deliverable, accepted });
+    if (agreement.client.toLowerCase() !== me.address.toLowerCase()) throw new Error('Only the client of treaty #' + id + ' reviews deliveries.');
+    if (DeliveryStatus[delivery.status] !== 'Pending') throw new Error('Delivery ' + unit + ' of treaty #' + id + ' is not pending.');
+    const message = reviewMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, id, unit, deliverable: delivery.deliverable, accepted });
     await this.#same(message, 'reviewMessage', [BigInt(id), BigInt(unit), accepted]);
     return this.#signed(accepted ? 'accept' : 'reject', { id: BigInt(id), unit: BigInt(unit) }, message, options);
   }
@@ -215,24 +217,24 @@ export class QorePact {
     const wei = amount === 'all' ? available : toWei(amount);
     if (wei === 0n || wei > available) throw new Error('You can withdraw up to ' + qor(available) + '.');
     const destination = getAddress(to ?? me.address);
-    const message = withdrawalMessage({ chainId: this.chain.id, contract: this.contract, recipient: account, to: destination, amount: wei, nonce });
+    const message = withdrawalMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, recipient: account, to: destination, amount: wei, nonce });
     await this.#same(message, 'withdrawalMessage', [account, destination, wei, nonce]);
     return this.#signed('withdraw', { recipient: account, to: destination, amount: wei }, message, options);
   }
 
   /** As the agent: agree to `owner`'s limits. Returns the agent's signature for the owner to submit. */
-  async approveOwner({ owner, maxPerPact, maxTotal, expiry }) {
+  async approveOwner({ owner, maxPerTreaty, maxTotal, expiry }) {
     const me = this.#me();
-    const message = await this.#mandateBytes(me.address, owner, maxPerPact, maxTotal, expiry);
+    const message = await this.#mandateBytes(me.address, owner, maxPerTreaty, maxTotal, expiry);
     return me.sign(message);
   }
 
   /** As the owner: set `agent`'s limits with the agent's signature from approveOwner(). */
-  async setMandate({ agent, maxPerPact, maxTotal, expiry, agentSignature }, options) {
+  async setMandate({ agent, maxPerTreaty, maxTotal, expiry, agentSignature }, options) {
     const me = this.#me();
-    const message = await this.#mandateBytes(agent, me.address, maxPerPact, maxTotal, expiry);
+    const message = await this.#mandateBytes(agent, me.address, maxPerTreaty, maxTotal, expiry);
     const fields = {
-      agent, owner: me.address, maxPerPact: toWei(maxPerPact), maxTotal: toWei(maxTotal), expiry: BigInt(expiry),
+      agent, owner: me.address, maxPerTreaty: toWei(maxPerTreaty), maxTotal: toWei(maxTotal), expiry: BigInt(expiry),
       agentSignature, ownerSignature: me.sign(message),
     };
     return this.#relayOrSend('setMandate', fields, options);
@@ -244,7 +246,7 @@ export class QorePact {
     const mandate = await this.mandate(agent);
     if (!mandate || mandate.owner.toLowerCase() !== me.address.toLowerCase()) throw new Error('You are not the owner of ' + agent + '.');
     const nonce = await this.read('mandateNonces', [agent]);
-    const message = revokeMessage({ chainId: this.chain.id, contract: this.contract, agent, nonce });
+    const message = revokeMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, agent, nonce });
     await this.#same(message, 'revokeMessage', [agent]);
     return this.#relayOrSend('revokeMandate', { agent, ownerSignature: me.sign(message) }, options);
   }
@@ -263,13 +265,13 @@ export class QorePact {
 
   // -------------------------------------------------------------- helpers
 
-  async #mandateBytes(agent, owner, maxPerPact, maxTotal, expiry) {
+  async #mandateBytes(agent, owner, maxPerTreaty, maxTotal, expiry) {
     const nonce = await this.read('mandateNonces', [agent]);
     const message = mandateMessage({
-      chainId: this.chain.id, contract: this.contract, agent, owner,
-      maxPerPact: toWei(maxPerPact), maxTotal: toWei(maxTotal), expiry: BigInt(expiry), nonce,
+      chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, agent, owner,
+      maxPerTreaty: toWei(maxPerTreaty), maxTotal: toWei(maxTotal), expiry: BigInt(expiry), nonce,
     });
-    await this.#same(message, 'mandateMessage', [agent, owner, toWei(maxPerPact), toWei(maxTotal), BigInt(expiry)]);
+    await this.#same(message, 'mandateMessage', [agent, owner, toWei(maxPerTreaty), toWei(maxTotal), BigInt(expiry)]);
     return message;
   }
 

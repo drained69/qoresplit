@@ -14,7 +14,7 @@ const chain = defineChain({
   id: 9800, name: 'QoreChain Diana', nativeCurrency: { name: 'Test QOR', symbol: 'QOR', decimals: 18 },
   rpcUrls: { default: { http: [process.env.QORE_EVM_RPC?.trim() || 'https://evm-testnet.qore.host'] } },
 });
-const artifact = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
+const artifact = JSON.parse(await readFile(new URL('../artifacts/Treaty.json', import.meta.url)));
 const account = privateKeyToAccount(key);
 const client = createPublicClient({ chain, transport: http() });
 const wallet = createWalletClient({ account, chain, transport: http() });
@@ -44,13 +44,15 @@ try {
   if (!window.live || window.native_only || window.allowed_targets?.length) {
     throw new Error('Open a live Diana EVM window that permits contract creation.');
   }
-  // QorePact reads signers' keys through the pqcKeyStatus precompile; check it answers here.
+  // Treaty reads signers' keys through the pqcKeyStatus precompile; check it answers here.
   const key = await registeredKey(client, account.address);
   if (!key.registered || !key.proven || key.pubkey.length !== 2 + 2592 * 2) {
     throw new Error('The pqcKeyStatus precompile did not return a proven ML-DSA-87 key for the deployer.');
   }
 
-  const hash = await wallet.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode });
+  // Signatures name the QoreChain chain as QoreSign message signing writes it. The gas is set
+  // explicitly: Diana's RPC caps gas estimates at 5M, close to what this deployment needs.
+  const hash = await wallet.deployContract({ abi: artifact.abi, bytecode: artifact.bytecode, args: ['qorechain-diana'], gas: 7_000_000n });
   console.log('Diana deployment submitted', hash);
   const receipt = await client.waitForTransactionReceipt({ hash, timeout: 90_000 });
   if (receipt.status !== 'success' || !receipt.contractAddress) throw new Error('Diana deployment reverted.');
@@ -58,7 +60,7 @@ try {
   if (code?.toLowerCase() !== artifact.runtime.toLowerCase()) {
     throw new Error('Diana returned different bytecode. Inspect deployment ' + hash + ' before retrying.');
   }
-  console.log('VITE_QOREPACT_ADDRESS=' + receipt.contractAddress);
+  console.log('VITE_TREATY_ADDRESS=' + receipt.contractAddress);
 } catch (error) {
   console.error(error.shortMessage ?? error.message);
   process.exitCode = 1;

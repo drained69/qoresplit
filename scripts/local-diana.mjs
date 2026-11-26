@@ -3,7 +3,7 @@
 //
 // - A Hardhat node with chain ID 9800 runs the EVM.
 // - The ML-DSA-87 precompiles are stand-ins, but their answers come from real
-//   cryptography: before a QorePact call signed with ML-DSA-87 reaches the node,
+//   cryptography: before a Treaty call signed with ML-DSA-87 reaches the node,
 //   this server verifies the ML-DSA-87 signature with @qorechain/sdk against the
 //   registered key and the exact bytes the contract will check, and only then
 //   attests it to the pqcVerify stand-in. A forged signature is never attested.
@@ -155,7 +155,7 @@ export async function startDiana({ abi }) {
 
   const view = (functionName, args) => client.readContract({ address: contract, abi, functionName, args });
 
-  /** The (account, message, signature) pairs a QorePact call will ask pqcVerify about. */
+  /** The (account, message, signature) pairs a Treaty call will ask pqcVerify about. */
   async function signaturesIn(functionName, args) {
     switch (functionName) {
       case 'sign': {
@@ -179,8 +179,8 @@ export async function startDiana({ abi }) {
         return [[signer, await view('withdrawalMessage', [recipient, to, amount, nonce]), signature]];
       }
       case 'setMandate': {
-        const [agent, owner, maxPerPact, maxTotal, expiry, agentSignature, ownerSignature] = args;
-        const message = await view('mandateMessage', [agent, owner, maxPerPact, maxTotal, expiry]);
+        const [agent, owner, maxPerTreaty, maxTotal, expiry, agentSignature, ownerSignature] = args;
+        const message = await view('mandateMessage', [agent, owner, maxPerTreaty, maxTotal, expiry]);
         return [[agent, message, agentSignature], [owner, message, ownerSignature]];
       }
       case 'revokeMandate': {
@@ -193,7 +193,7 @@ export async function startDiana({ abi }) {
     }
   }
 
-  /** Verify QorePact signatures for real, and attest the valid ones to the pqcVerify stand-in. */
+  /** Verify Treaty signatures for real, and attest the valid ones to the pqcVerify stand-in. */
   async function attestIfValid(to, data) {
     if (!contract || !to || !data || to.toLowerCase() !== contract.toLowerCase()) return;
     let call;

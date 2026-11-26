@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateMnemonic, generatePqcKeypair } from '@qorechain/sdk';
 import {
-  createWalletClient, formatEther, getAddress, http, keccak256, parseEther, stringToHex, toHex,
+  createWalletClient, formatEther, getAddress, hexToBytes, http, keccak256, parseEther, stringToHex, toHex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
@@ -23,7 +23,7 @@ import { loadSigner } from '../sdk/pqc.mjs';
 import { qorAddressOf, startDiana } from '../scripts/local-diana.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { abi } = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
+const { abi } = JSON.parse(await readFile(new URL('../artifacts/Treaty.json', import.meta.url)));
 // Hardhat's first default account, used only on the local stand-in.
 const DEPLOYER_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
@@ -49,8 +49,8 @@ function runNode(script, args, env) {
 
 /** Run the signing tool as a collaborator would: npm run pq -- <args>. */
 function pq(person, ...args) {
-  return runNode('scripts/qorepact.mjs', args, {
-    QORE_MNEMONIC: person?.mnemonic ?? '', VITE_QOREPACT_ADDRESS: contract,
+  return runNode('scripts/treaty.mjs', args, {
+    QORE_MNEMONIC: person?.mnemonic ?? '', VITE_TREATY_ADDRESS: contract,
     QORE_EVM_RPC: diana.url, QORE_REST_URL: diana.url,
   });
 }
@@ -87,7 +87,7 @@ async function lastNativeReceipt() {
 
 before(async () => {
   diana = await startDiana({ abi });
-  work = await mkdtemp(join(tmpdir(), 'qorepact-e2e-'));
+  work = await mkdtemp(join(tmpdir(), 'treaty-e2e-'));
   [, payer, mallory] = diana.accounts;
 
   // Collaborators: fresh mnemonics, real ML-DSA-87 keys, registered on the stand-in chain.
@@ -105,7 +105,7 @@ before(async () => {
     DIANA_DEPLOYER_KEY: DEPLOYER_KEY, QORE_EVM_RPC: diana.url, QORE_NATIVE_REST: diana.url,
   });
   assert.equal(deployed.code, 0, deployed.output);
-  contract = getAddress(deployed.stdout.match(/VITE_QOREPACT_ADDRESS=(0x[\da-fA-F]{40})/)[1]);
+  contract = getAddress(deployed.stdout.match(/VITE_TREATY_ADDRESS=(0x[\da-fA-F]{40})/)[1]);
   diana.useContract(contract);
   relay = createWalletClient({ chain: diana.client.chain, transport: http(diana.url) });
 });
@@ -163,11 +163,11 @@ test('signing tool: consent, checkout, attack, withdrawal, replay and amendment 
   const saleReceipt = await lastNativeReceipt();
   assert.equal(saleReceipt.sender, qorAddressOf(contract));
   assert.equal(BigInt(saleReceipt.height), sale.blockNumber);
-  assert.ok(saleReceipt.note.startsWith('qorepact:'));
+  assert.ok(saleReceipt.note.startsWith('treaty:'));
 
   // An attacker with alice's classical key, but not her ML-DSA-87 key.
   const before = diana.stats.refused;
-  assert.match(await pqOk(alice, 'attack'), /BLOCKED by QorePact: BadPqcSignature/);
+  assert.match(await pqOk(alice, 'attack'), /BLOCKED by Treaty: BadPqcSignature/);
   assert.ok(diana.stats.refused > before, 'the forged signature was checked and refused');
   assert.equal(await read('claimable', [alice.address]), parseEther('6'));
 
@@ -214,35 +214,35 @@ test('window rules are explained before sending', () => {
   // The shape Diana returns.
   const live = { found: true, live: true, native_only: false, allowed_targets: [contractAddress], remaining_txs: '19', remaining_value: '14967528' };
   assert.equal(windowProblem(live, { contract: contractAddress, valueWei: parseEther('12') }), undefined);
-  assert.match(windowProblem(live, { contract: '0x0000000000000000000000000000000000000001' }), /does not allow QorePact/);
+  assert.match(windowProblem(live, { contract: '0x0000000000000000000000000000000000000001' }), /does not allow Treaty/);
   assert.match(windowProblem(live, { contract: contractAddress, valueWei: parseEther('15') }), /less value left/);
   assert.match(windowProblem({ ...live, remaining_txs: '0' }, { contract: contractAddress }), /used every transaction/);
   assert.match(windowProblem({ found: false }, { contract: contractAddress }), /no live EVM window/);
   assert.equal(windowProblem({ ...live, allowed_targets: [] }, { contract: '0x0000000000000000000000000000000000000001' }), undefined);
 });
 
-test('agents: limits from an owner, a service pact, delivery, review, release, off switch and refund', async () => {
+test('agents: limits from an owner, a service treaty, delivery, review, release, off switch and refund', async () => {
   const { alice: owner, bob: agent, carol: provider, dave: helper } = people;
   // The agent agrees to its owner's limits; the owner sets them.
   const approval = join(work, 'approval.json');
-  assert.match(await pqOk(agent, 'approve-owner', '--owner', owner.address, '--max-per-pact', '10', '--max-total', '15', '--days', '7', '--out', approval, '--yes'),
+  assert.match(await pqOk(agent, 'approve-owner', '--owner', owner.address, '--max-per-treaty', '10', '--max-total', '15', '--days', '7', '--out', approval, '--yes'),
     /Saved the agent’s approval/);
   assert.match((await pq(helper, 'set-limits', '--approval', approval, '--yes')).output, /names .* as owner, not you/);
   await pqOk(owner, 'set-limits', '--approval', approval, '--yes');
-  assert.match(await pqOk(agent, 'statement'), /owner\s+.*\n\s+limits\s+10 QOR per pact, 0 QOR of 15 QOR committed/);
+  assert.match(await pqOk(agent, 'statement'), /owner\s+.*\n\s+limits\s+10 QOR per treaty, 0 QOR of 15 QOR committed/);
 
   const earnedBefore = await Promise.all([provider, helper].map(({ address }) => read('claimable', [address])));
-  // The agent's service pact: 2 QOR per unit, up to 5, with a two-minute review.
+  // The agent's service treaty: 2 QOR per unit, up to 5, with a two-minute review.
   const deadline = (await diana.client.getBlock()).timestamp + 3600n;
   const propose = (maxUnits) => send(payer, 'proposeService', ['Clean five datasets', parseEther('2'), maxUnits, deadline, 120,
     agent.address, [provider.address, helper.address], [8000, 2000]]);
   assert.equal((await propose(5)).status, 'success');
   const id = await read('agreementCount');
-  assert.match(await pqOk(agent, 'show', String(id)), /Service pact #\d+ · Pending[\s\S]*budget 10 QOR/);
+  assert.match(await pqOk(agent, 'show', String(id)), /Service treaty #\d+ · Pending[\s\S]*budget 10 QOR/);
   for (const person of [provider, helper, agent]) await pqOk(person, 'sign', String(id), '--yes');
   assert.equal((await read('getAgreement', [id])).status, 2);
 
-  // Over the owner's per-pact limit: the agent cannot even agree.
+  // Over the owner's per-treaty limit: the agent cannot even agree.
   assert.equal((await propose(6)).status, 'success');
   const greedy = await read('agreementCount');
   for (const person of [provider, helper]) await pqOk(person, 'sign', String(greedy), '--yes');
@@ -270,7 +270,7 @@ test('agents: limits from an owner, a service pact, delivery, review, release, o
   assert.match(await pqOk(helper, 'show', String(id)), /delivery 0 · Accepted[\s\S]*delivery 1 · Rejected[\s\S]*delivery 2 · Released/);
 
   // A stolen classical key cannot deliver junk or withdraw.
-  assert.match(await pqOk(provider, 'attack'), /BLOCKED by QorePact: BadPqcSignature/);
+  assert.match(await pqOk(provider, 'attack'), /BLOCKED by Treaty: BadPqcSignature/);
 
   // The owner switches the agent off; the agent cannot accept anything any more.
   await pqOk(owner, 'revoke', agent.address, '--yes');
@@ -304,7 +304,7 @@ function loadPlaywright() {
   }
 }
 
-test('web app in a browser: revenue share and service pact, relay, pay, verify on both VMs, statements and amendments', { timeout: 240_000 }, async (t) => {
+test('web app in a browser: revenue share and service treaty, relay, pay, verify on both VMs, statements and amendments', { timeout: 240_000 }, async (t) => {
   const playwright = loadPlaywright();
   if (!playwright) {
     t.skip('Playwright is not installed. Install it to run the browser part: npm i -D playwright && npx playwright install chromium');
@@ -313,7 +313,7 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   const { alice, dave: bob, carol } = people;
   const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', '0', '--strictPort=false', '--host', '127.0.0.1'], {
     cwd: root, stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, VITE_QOREPACT_ADDRESS: contract, VITE_QOREPACT_RPC: diana.url, QORE_NATIVE_REST: diana.url },
+    env: { ...process.env, VITE_TREATY_ADDRESS: contract, VITE_TREATY_RPC: diana.url, QORE_NATIVE_REST: diana.url },
   });
   let viteLog = '';
   const appUrl = await new Promise((resolve, reject) => {
@@ -336,6 +336,29 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on('pageerror', (error) => errors.push(error.message));
   // A stand-in wallet: the payer's unlocked account on the local chain.
+  // A stand-in QoreX wallet: it signs with the official QoreSign library, as QoreX does, with the
+  // keys of whichever person the test puts it on. Its ML-DSA-87 signatures are real.
+  const { classicalKeyFromPrivate, signMessage } = await import('@qorechain/qoresign');
+  const { deriveUnifiedAccount } = await import('@qorechain/sdk');
+  let qorexPerson = alice;
+  const qorexKeys = async () => deriveUnifiedAccount(qorexPerson.mnemonic, 0);
+  await page.exposeFunction('__qorexAddress', async () => (await qorexKeys()).cosmos);
+  await page.exposeFunction('__qorexSign', async (chainId, signer, data) => {
+    const keys = await qorexKeys();
+    assert.equal(signer, keys.cosmos, 'QoreX is asked to sign for its own account');
+    assert.ok(data.startsWith('Treaty: '), 'the person sees readable Treaty text');
+    return signMessage({
+      chainId, signer, data, classicalKey: classicalKeyFromPrivate(hexToBytes(keys.privateKey), 'eth_secp256k1'), pqKey: keys.pqc,
+    });
+  });
+  await page.addInitScript(() => {
+    window.qorex = { native: {
+      capabilities: ['signArbitrary'],
+      async enable() {},
+      async getKey() { return { bech32Address: await window.__qorexAddress() }; },
+      signArbitrary: (chainId, signer, data) => window.__qorexSign(chainId, signer, data),
+    } };
+  });
   await page.addInitScript(({ from, rpc }) => {
     window.ethereum = {
       isMetaMask: true, on() {},
@@ -385,15 +408,17 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await go('#pay/' + contract + '/' + id);
   assert.match(await page.textContent('.intro'), /opens when every party has signed/);
 
-  // Alice signs with the tool; Bob's saved signature is relayed from the app.
-  await pqOk(alice, 'sign', id, '--yes');
+  // Alice signs in the browser with QoreX; Bob's saved signature is relayed from the app.
+  await go('#agreement/' + contract + '/' + id);
+  await page.click('[data-qorex-sign="' + alice.address + '"]');
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('Your signature is recorded'), null, { timeout: 30_000 });
   const bobFile = join(work, 'bob-zine.json');
   await pqOk(bob, 'sign', id, '--yes', '--out', bobFile);
   await go('#agreement/' + contract + '/' + id);
   assert.match(await page.textContent('.tag'), /1 of 2/);
   await page.fill('#signed-request', await readFile(bobFile, 'utf8'));
   await page.click('.relay-form button');
-  await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('The pact is live'), null, { timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('The treaty is live'), null, { timeout: 30_000 });
   await page.waitForSelector('.tag.ok');
   assert.match(await page.textContent('.tag'), /Live · terms recorded on EVM and Native/);
 
@@ -411,7 +436,7 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   // A forged withdrawal pasted into the app is refused with a clear reason.
   await go('#submit');
   await page.fill('#signed-request', JSON.stringify({
-    kind: 'qorepact-signed-request', version: 3, chainId: 9800, contract, action: 'withdraw',
+    kind: 'treaty-signed-request', version: 3, chainId: 9800, contract, action: 'withdraw',
     recipient: alice.address, to: mallory, amount: parseEther('1').toString(), signature: '0x' + '11'.repeat(4627),
   }));
   await page.click('.relay-form button');
@@ -427,7 +452,7 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await page.waitForFunction(() => document.querySelector('#status')?.textContent.startsWith('Withdrew 1.8 QOR'), null, { timeout: 30_000 });
   const available = await read('claimable', [alice.address]);
   assert.match(await page.textContent('.amount'), new RegExp(formatEther(available).replace('.', '\\.') + ' QOR'));
-  assert.match(await page.textContent('.tag'), /Balances match the signed pacts/);
+  assert.match(await page.textContent('.tag'), /Balances match the signed treaties/);
   await page.waitForSelector('.history li');
   assert.match(await page.textContent('#withdrawals'), /1\.8 QOR/);
 
@@ -452,7 +477,7 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   assert.match(signers, /on the version being replaced/);
   assert.match(await page.textContent('.tag'), /0 of 3/);
 
-  // A service pact made in the app: alice hires carol, anyone funds, work is delivered and paid.
+  // A service treaty made in the app: alice hires carol, anyone funds, work is delivered and paid.
   await go('#service');
   const inThreeDays = new Date(Date.now() + 3 * 86_400_000 - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   await page.fill('#title', 'Translate ten pages');
@@ -467,7 +492,7 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await page.waitForURL(/#agreement\//, { timeout: 30_000 });
   await page.waitForSelector('.signers li');
   const job = page.url().split('/').pop();
-  assert.match(await page.textContent('.eyebrow'), /Service pact/);
+  assert.match(await page.textContent('.eyebrow'), /Service treaty/);
   assert.match(await page.textContent('.signers'), /Provider[\s\S]*Client/);
   await pqOk(carol, 'sign', job, '--yes');
   await pqOk(alice, 'sign', job, '--yes');
@@ -483,8 +508,15 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await page.click('#fund');
   await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('is locked'), null, { timeout: 30_000 });
   assert.match(await page.textContent('.tag'), /budget locked/);
-  // Carol delivers; alice's acceptance is saved and relayed from the app.
-  await pqOk(carol, 'deliver', job, '--text', 'ten translated pages', '--yes');
+  // Carol delivers a file with QoreX in the browser; only its hash goes on chain.
+  qorexPerson = carol;
+  await go('#agreement/' + contract + '/' + job);
+  const pages = Buffer.from('ten translated pages');
+  await page.setInputFiles('#work', { name: 'pages.txt', mimeType: 'text/plain', buffer: pages });
+  await page.click('#deliver-form button');
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('Delivery 0 recorded'), null, { timeout: 30_000 });
+  assert.equal((await read('getDelivery', [BigInt(job), 0n])).deliverable, keccak256(pages));
+  // Alice's acceptance is saved by the tool and relayed from the app.
   const acceptance = join(work, 'alice-accept.json');
   await pqOk(alice, 'accept', job, '0', '--out', acceptance, '--yes');
   await go('#agreement/' + contract + '/' + job);
@@ -501,6 +533,12 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await page.click('[data-release="1"]');
   await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('released and paid'), null, { timeout: 30_000 });
   assert.match(await page.textContent('.action h2'), /2 units paid of 3/);
+  // A third delivery: alice rejects it in the browser with QoreX, so that unit is not paid.
+  await pqOk(carol, 'deliver', job, '--text', 'one page, untranslated', '--yes');
+  qorexPerson = alice;
+  await go('#agreement/' + contract + '/' + job);
+  await page.click('[data-qorex-review="reject"][data-unit="2"]');
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('Delivery 2 rejected'), null, { timeout: 30_000 });
   // After the deadline the unused unit goes back to alice, from the app.
   await diana.advance(4 * 86_400);
   await go('#agreement/' + contract + '/' + job);
@@ -511,6 +549,14 @@ test('web app in a browser: revenue share and service pact, relay, pay, verify o
   await page.click('#refund');
   await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('returned to'), null, { timeout: 30_000 });
   assert.equal(await diana.client.getBalance({ address: alice.address }), aliceBefore + parseEther('1'));
+  // Carol withdraws her earnings in the browser with QoreX.
+  qorexPerson = carol;
+  const carolEarned = await read('claimable', [carol.address]);
+  await go('#statement/' + contract + '/' + carol.address);
+  await page.click('#qorex-withdraw');
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent.startsWith('Withdrew'), null, { timeout: 30_000 });
+  assert.equal(await read('claimable', [carol.address]), 0n);
+  assert.ok(carolEarned > 0n);
 
   // Phone width: no horizontal scrolling on the main pages.
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });

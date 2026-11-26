@@ -1,4 +1,4 @@
-// Post-quantum signing for QorePact, with the official QoreChain SDK.
+// Post-quantum signing for Treaty, with the official QoreChain SDK.
 // Browser wallets cannot produce ML-DSA-87 signatures over arbitrary bytes yet
 // (QoreX refuses signArbitrary), so the signatures are made here, on your computer.
 import { deriveUnifiedAccount, generatePqcKeypair, pqcSign, pqcVerify, unifiedAccountFromSeed } from '@qorechain/sdk';

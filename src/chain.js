@@ -3,7 +3,7 @@ import {
   decodeEventLog, defineChain, formatEther, getAddress, hexToBytes, hexToString, http, isAddress, parseEther, zeroAddress,
 } from 'viem';
 import { bech32 } from '@scure/base';
-import artifact from '../artifacts/QorePact.json';
+import artifact from '../artifacts/Treaty.json';
 import {
   DeliveryStatus, Kind, MAX_PARTIES, MAX_REVIEW, MAX_UNITS, MIN_REVIEW, Status, WEI_PER_UQOR, agreementCommitment, budgetOf,
   deliveryCommitment, deliveryNote, isService, parseSignedRequest, paymentCommitment, paymentNote, splitAmounts, termsHash,
@@ -13,15 +13,15 @@ import {
 export { Status, paymentId as checkoutId, splitAmounts } from './protocol.js';
 
 export const abi = artifact.abi;
-// VITE_QOREPACT_RPC is only for local rehearsals against a chain that reports id 9800.
-export const RPC = import.meta.env.VITE_QOREPACT_RPC?.trim() || 'https://evm-testnet.qore.host';
+// VITE_TREATY_RPC is only for local rehearsals against a chain that reports id 9800.
+export const RPC = import.meta.env.VITE_TREATY_RPC?.trim() || 'https://evm-testnet.qore.host';
 export const chain = defineChain({
   id: 9800, name: 'QoreChain Diana',
   nativeCurrency: { name: 'Test QOR', symbol: 'QOR', decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 });
 let deploymentCheck;
-const configuredAddress = import.meta.env.VITE_QOREPACT_ADDRESS?.trim();
+const configuredAddress = import.meta.env.VITE_TREATY_ADDRESS?.trim();
 export const address = isAddress(configuredAddress ?? '') && configuredAddress !== zeroAddress
   ? getAddress(configuredAddress) : undefined;
 export const client = createPublicClient({ chain, transport: http(RPC, { timeout: 12_000 }) });
@@ -50,7 +50,7 @@ function validateParties(title, price, recipientTexts, shareTexts, minimum, role
   const titleBytes = new TextEncoder().encode(title).length;
   if (titleBytes < 1 || titleBytes > 96) throw new Error('Enter a title between 1 and 96 UTF-8 bytes.');
   if (recipientTexts.length < minimum || recipientTexts.length > MAX_PARTIES || recipientTexts.length !== shareTexts.length) {
-    throw new Error('A pact needs ' + (minimum === 1 ? 'one' : 'two') + ' to ' + MAX_PARTIES + ' ' + role + 's.');
+    throw new Error('A treaty needs ' + (minimum === 1 ? 'one' : 'two') + ' to ' + MAX_PARTIES + ' ' + role + 's.');
   }
   const recipients = recipientTexts.map((value) => {
     if (!isAddress(value)) throw new Error('Enter a valid 0x address for every ' + role + '.');
@@ -133,7 +133,7 @@ async function assertDeployment() {
   if (!address) throw new Error('Configure the Diana deployment to use live payments.');
   deploymentCheck ??= Promise.all([client.getChainId(), client.getCode({ address })]).then(([chainId, code]) => {
     if (chainId !== chain.id || code?.toLowerCase() !== artifact.runtime.toLowerCase()) {
-      throw new Error('Diana did not return the expected QorePact contract code.');
+      throw new Error('Diana did not return the expected Treaty contract code.');
     }
   }).catch((error) => {
     deploymentCheck = undefined;
@@ -147,7 +147,7 @@ export async function read(functionName, args = []) {
   return client.readContract({ address, abi, functionName, args });
 }
 
-/** The account's Diana EVM window, and why it would refuse a call to QorePact carrying `valueWei`. */
+/** The account's Diana EVM window, and why it would refuse a call to Treaty carrying `valueWei`. */
 export async function checkWindow(account, valueWei = 0n) {
   const qorAddress = qorAddressOf(account);
   const response = await fetch('/api/native/windows/' + qorAddress, { signal: AbortSignal.timeout(10_000) });
@@ -181,12 +181,12 @@ export function getEvent(receipt, eventName, { optional = false } = {}) {
       if (event.eventName === eventName) return event.args;
     } catch { /* Other logs are irrelevant to this event. */ }
   }
-  if (!optional) throw new Error('This transaction has no QorePact ' + eventName + ' event.');
+  if (!optional) throw new Error('This transaction has no Treaty ' + eventName + ' event.');
 }
 
 const errorText = {
-  AgreementNotFound: 'This pact does not exist on this deployment.',
-  NotActive: 'This pact is not live. Every party must sign it first, and a replaced version takes no payments.',
+  AgreementNotFound: 'This treaty does not exist on this deployment.',
+  NotActive: 'This treaty is not live. Every party must sign it first, and a replaced version takes no payments.',
   NotPending: 'This agreement is no longer waiting for signatures.',
   PreviousNotActive: 'The version this change replaces is no longer active.',
   NotASigner: 'That account is not one of the signers of this agreement.',
@@ -203,14 +203,14 @@ const errorText = {
   InvalidWithdrawal: 'Withdraw a positive amount to a wallet address.',
   InsufficientBalance: 'That is more than the available balance.',
   TransferFailed: 'The destination refused the payment. Nothing changed.',
-  WrongKind: 'That action does not apply to this kind of pact.',
+  WrongKind: 'That action does not apply to this kind of treaty.',
   NotClient: 'Only the client, or the client’s owner, can lock this budget. Connect that wallet.',
-  AlreadyFunded: 'This pact’s budget is already locked.',
+  AlreadyFunded: 'This treaty’s budget is already locked.',
   NotFunded: 'The client has not locked the budget yet.',
-  DeadlinePassed: 'The pact’s deadline has passed.',
+  DeadlinePassed: 'The treaty’s deadline has passed.',
   DeadlineNotPassed: 'The unused budget returns only after the deadline.',
-  NoUnitsLeft: 'Every unit of this pact is delivered or waiting for review.',
-  NotAProvider: 'That account is not a provider in this pact.',
+  NoUnitsLeft: 'Every unit of this treaty is delivered or waiting for review.',
+  NotAProvider: 'That account is not a provider in this treaty.',
   DeliveryNotPending: 'That delivery is no longer waiting for review.',
   ReviewPeriodOver: 'The review period for that delivery is over.',
   ReviewPeriodNotOver: 'The client can still review that delivery.',
@@ -220,7 +220,7 @@ const errorText = {
   InvalidMandate: 'Those limits are invalid, or the agent already has a different owner.',
 };
 
-/** A readable reason for a failed call, including QorePact's own errors. */
+/** A readable reason for a failed call, including Treaty's own errors. */
 export function explainError(error) {
   if (error instanceof BaseError) {
     const revert = error.walk((cause) => cause instanceof ContractFunctionRevertedError);
@@ -276,7 +276,7 @@ async function checkNativeReceipt(reply, note, height) {
 
 export async function getAgreement(id) {
   const agreement = await read('getAgreement', [id]);
-  if (termsHash(agreement) !== agreement.termsHash) throw new Error('The pact does not match its terms hash.');
+  if (termsHash(agreement) !== agreement.termsHash) throw new Error('The treaty does not match its terms hash.');
   return {
     ...agreement, state: Status[agreement.status], kindName: Kind[agreement.kind], service: isService(agreement),
     budget: isService(agreement) ? budgetOf(agreement) : 0n,
@@ -327,7 +327,7 @@ export async function getStatement(account) {
   }));
   const fromAgreements = agreements.reduce((sum, row) => sum + row.total, 0n);
   const [clientOf, mandate, signer] = await Promise.all([
-    read('pactsAsClient', [account]), read('getMandate', [account]), read('withdrawalSigner', [account]),
+    read('treatiesAsClient', [account]), read('getMandate', [account]), read('withdrawalSigner', [account]),
   ]);
   return {
     earned, withdrawn, available, nonce, agreements, clientOf, signer,
@@ -345,13 +345,13 @@ export async function getWithdrawals(account) {
 
 export const parseRequest = (text) => parseSignedRequest(text, { chainId: chain.id, contract: address });
 
-/** A service pact's deliveries, from contract state. */
+/** A service treaty's deliveries, from contract state. */
 export async function getDeliveries(id, count) {
   const list = await Promise.all(Array.from({ length: Number(count) }, (_, unit) => read('getDelivery', [id, BigInt(unit)])));
   return list.map((delivery, unit) => ({ ...delivery, unit: BigInt(unit), state: DeliveryStatus[delivery.status] }));
 }
 
-/** Payments of a service pact, from event logs, each checked against its Native receipt. Can fail if the RPC limits logs. */
+/** Payments of a service treaty, from event logs, each checked against its Native receipt. Can fail if the RPC limits logs. */
 export async function getUnitPayments(id, agreement) {
   const fromBlock = await read('deployBlock');
   const logs = await client.getContractEvents({ address, abi, eventName: 'Paid', args: { id }, fromBlock });
@@ -366,6 +366,13 @@ export async function getUnitPayments(id, agreement) {
       : { nativeError: 'The payment does not match its commitment.' };
     return { unit: log.args.unit, how: DeliveryStatus[log.args.how], hash: log.transactionHash, ...native };
   }));
+}
+
+let signingChainName;
+/** The chain name Treaty's signatures use, as QoreX signs it (for example "qorechain-diana"). */
+export async function getSigningChain() {
+  signingChainName ??= await read('signingChain');
+  return signingChainName;
 }
 
 export async function getRefundable(id) {

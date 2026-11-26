@@ -23,7 +23,7 @@ const PQC_VERIFY = '0x0000000000000000000000000000000000000a01';
 const PQC_KEYS = '0x0000000000000000000000000000000000000a02';
 const RECEIPTS = 'qor1xjayq5ev55tkzpml9klxwyshr7gdrha0nurha9jhm0f0gdckksgs3gltw8';
 const CHAIN_ID = 31337;
-const { abi, bytecode, runtime } = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
+const { abi, bytecode, runtime } = JSON.parse(await readFile(new URL('../artifacts/Treaty.json', import.meta.url)));
 
 // Stand-ins for QoreChain's precompiles, which a local EVM does not have (the same
 // approach as the QoreChain workshop vault). A stand-in "signature" is valid when it
@@ -79,7 +79,7 @@ let publicClient;
 let wallet;
 let contract;
 let deployer, alice, bob, carol, dave, erin, payer, relayer, mallory;
-// Agents and their human owners, for service pacts and mandates.
+// Agents and their human owners, for service treaties and mandates.
 let buyer, owner, seller, helper, agentB;
 
 const pubkeyOf = (account) => keccak256(concatHex([toHex('pk'), account]));
@@ -182,7 +182,7 @@ before(async () => {
   await setCode(BRIDGE, compiled.BridgeMock.evm.deployedBytecode.object);
   for (const account of [alice, bob, carol, dave, buyer, owner, seller, helper, agentB]) await setKey(account);
   await setKey(erin, true, false);
-  const hash = await wallet.deployContract({ account: deployer, abi, bytecode });
+  const hash = await wallet.deployContract({ account: deployer, abi, bytecode, args: ['qorechain-diana'] });
   const deployed = await publicClient.waitForTransactionReceipt({ hash });
   contract = deployed.contractAddress;
   // The app and the signing tool recognise the deployment by its exact runtime code.
@@ -470,17 +470,17 @@ test('signed requests carry exactly what the contract needs', () => {
   assert.equal(parsed.action, 'withdraw');
   assert.deepEqual(parsed.args, [alice, bob, 5n, '0xabcd']);
   assert.throws(() => parseSignedRequest(text, { chainId: 9800, contract }), /different chain/);
-  assert.throws(() => parseSignedRequest(text, { chainId: CHAIN_ID, contract: alice }), /different QorePact/);
+  assert.throws(() => parseSignedRequest(text, { chainId: CHAIN_ID, contract: alice }), /different Treaty/);
   const sign = signedRequest('sign', { id: 3n, signer: carol, signature: '0x01' }, scope);
   assert.deepEqual(parseSignedRequest(sign, scope).args, [3n, carol, '0x01']);
   const deliver = signedRequest('deliver', { id: 1n, provider: bob, deliverable: '0x' + '12'.repeat(32), signature: '0x01' }, scope);
   assert.equal(parseSignedRequest(deliver, scope).label, 'Deliver work');
   assert.throws(() => parseSignedRequest(deliver.replace('"0x' + '12'.repeat(32), '"0x12'), scope), /valid deliverable/);
-  assert.throws(() => parseSignedRequest('{}', scope), /not a QorePact/);
+  assert.throws(() => parseSignedRequest('{}', scope), /not a Treaty/);
   assert.throws(() => signedRequest('drain', {}, scope), /Unknown action/);
 });
 
-// ------------------------------------------------------------ service pacts
+// ------------------------------------------------------------ service treaties
 
 const now = async () => (await publicClient.getBlock()).timestamp;
 async function advance(seconds) {
@@ -519,7 +519,7 @@ async function review(id, unit, accepted, signer = buyer) {
   return [id, unit, signAs(signer, message)];
 }
 
-test('a service pact locks the budget, pays accepted work, releases ignored work and refunds the rest', async () => {
+test('a service treaty locks the budget, pays accepted work, releases ignored work and refunds the rest', async () => {
   const { id, terms } = await proposeService();
   const agreement = await read('getAgreement', [id]);
   assert.equal(agreement.kind, 1);
@@ -605,7 +605,7 @@ test('a service pact locks the budget, pays accepted work, releases ignored work
   const final = await read('getAgreement', [id]);
   assert.deepEqual([final.sales, final.pendingUnits, final.refunded], [4n, 0, UNIT]);
   assert.ok((await read('agreementsOf', [helper])).includes(id));
-  assert.ok((await read('pactsAsClient', [buyer])).includes(id));
+  assert.ok((await read('treatiesAsClient', [buyer])).includes(id));
 });
 
 test('service terms are validated', async () => {
@@ -629,7 +629,7 @@ test('an owner limits what its agent can commit, can switch it off, and then con
   const expiry = (await now()) + 86400n;
   const limits = [parseEther('10'), parseEther('15'), expiry];
   const message = await read('mandateMessage', [buyer, owner, ...limits]);
-  assert.equal(message, mandateMessage({ chainId: CHAIN_ID, contract, agent: buyer, owner, maxPerPact: limits[0], maxTotal: limits[1], expiry, nonce: 0n }));
+  assert.equal(message, mandateMessage({ chainId: CHAIN_ID, contract, agent: buyer, owner, maxPerTreaty: limits[0], maxTotal: limits[1], expiry, nonce: 0n }));
   await reverts(relayer, 'setMandate', [buyer, owner, ...limits, signAs(mallory, message), signAs(owner, message)], 'BadPqcSignature');
   await reverts(relayer, 'setMandate', [buyer, owner, ...limits, signAs(buyer, message), signAs(mallory, message)], 'BadPqcSignature');
   await reverts(relayer, 'setMandate', [buyer, buyer, ...limits, signAs(buyer, message), signAs(buyer, message)], 'InvalidMandate');
@@ -640,7 +640,7 @@ test('an owner limits what its agent can commit, can switch it off, and then con
   const stolen = await read('mandateMessage', [buyer, mallory, ...limits]);
   await reverts(relayer, 'setMandate', [buyer, mallory, ...limits, signAs(buyer, stolen), signAs(mallory, stolen)], 'InvalidMandate');
 
-  // Over the per-pact limit: the agent cannot even agree.
+  // Over the per-treaty limit: the agent cannot even agree.
   const big = await proposeService({ maxUnits: 6 });
   for (const signer of [seller, helper]) await signTerms(big.id, signer);
   await reverts(relayer, 'sign', [big.id, buyer, signAs(buyer, await read('termsMessage', [big.id, buyer]))], 'MandateLimitExceeded');
@@ -661,7 +661,7 @@ test('an owner limits what its agent can commit, can switch it off, and then con
   await signTerms(second.id, buyer);
   assert.equal((await read('getAgreement', [second.id])).status, 2);
 
-  // The agent earns something as a provider in another pact.
+  // The agent earns something as a provider in another treaty.
   const { id: job } = await agreeService({ client: agentB, recipients: [buyer], shares: [10000], maxUnits: 1 });
   await sendOk(agentB, 'fund', [job], UNIT);
   const { unit } = await deliverAs(buyer, job, 'summary');

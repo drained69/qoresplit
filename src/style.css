@@ -138,7 +138,7 @@ td small { margin-top: 3px; }
 .history li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-block: 10px; border-bottom: 1px solid var(--line); font-size: .9rem; }
 .history li:last-child { border-bottom: 0; }
 .intro p a { color: var(--blue); }
-/* QorePact additions */
+/* Treaty additions */
 .eyebrow { margin: 0 0 8px; color: var(--blue); font-weight: 700; font-size: .85rem; letter-spacing: .02em; text-transform: uppercase; }
 .intro p.eyebrow { margin-top: 0; }
 .lede { color: var(--muted); font-size: .92rem; line-height: 1.5; margin: -8px 0 18px; }
@@ -156,6 +156,11 @@ td small { margin-top: 3px; }
 .compact { padding: 16px 24px; }
 .compact dd { margin-bottom: 0; }
 #payments h3 { margin: 18px 0 4px; }
+.deliver-form { display: grid; gap: 8px; justify-items: start; width: 100%; }
+.deliver-form .field { width: 100%; margin-bottom: 0; }
+.deliver-form input[type=file] { padding: 8px; }
+td .small { margin: 2px 4px 2px 0; }
+.qorex-hint a { color: var(--blue); }
 @media (max-width: 750px) {
   .grid-2 { grid-template-columns: 1fr; }
   .shell { width: calc(100% - 36px); }

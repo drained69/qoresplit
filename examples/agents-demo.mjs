@@ -1,108 +1,174 @@
-// QorePact demo: AI agents make a deal, deliver work, get paid, and a stolen key gets nothing.
+// Treaty demo: AI agents make a deal, deliver work, get paid, and a stolen key gets nothing.
 //
-//   npm run demo               the story in the terminal (about 30 seconds)
-//   npm run demo -- --serve    then keep the chain running and open the web app on it
+//   npm run demo               the story locally, in about 30 seconds
+//   npm run demo -- --serve    then keep the local chain running and open the web app on it
+//   npm run demo -- --diana    the same story on the real QoreChain Diana testnet (about 10 minutes),
+//                              with the accounts from `npm run accounts`; every transaction is saved
+//                              to deployments/diana-demo.json for the submission
 //
-// Everything runs locally on the Diana stand-in (scripts/local-diana.mjs): a chain with ID
-// 9800 whose ML-DSA-87 checks are backed by real ML-DSA-87 verification. Every party below
-// has its own fresh keys and acts only through the QorePact SDK, as separate agents would.
+// Locally, everything runs on the Diana stand-in (scripts/local-diana.mjs): a chain with ID 9800
+// whose ML-DSA-87 checks are backed by real ML-DSA-87 verification. On Diana, the chain's own
+// pqcVerify and pqcKeyStatus precompiles and the Cross-VM bridge do the work, and each party acts
+// through its own scoped EVM window. Every party has its own keys and acts only through the
+// Treaty SDK, as separate agents would.
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { generateMnemonic, generatePqcKeypair, pqcSign } from '@qorechain/sdk';
-import { hexToBytes, parseEther, toHex } from 'viem';
+import { hexToBytes, isAddress, parseEther, toHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { deliverableHash } from '../src/protocol.js';
-import { QorePact, abi, explain, qor } from '../sdk/qorepact.mjs';
+import { Treaty, abi, explain, qor } from '../sdk/treaty.mjs';
 import { loadSigner } from '../sdk/pqc.mjs';
-import { startDiana } from '../scripts/local-diana.mjs';
 
-const serve = process.argv.includes('--serve');
+const live = process.argv.includes('--diana');
+const serve = !live && process.argv.includes('--serve');
 const root = fileURLToPath(new URL('..', import.meta.url));
-const artifact = JSON.parse(await readFile(new URL('../artifacts/QorePact.json', import.meta.url)));
+const artifact = JSON.parse(await readFile(new URL('../artifacts/Treaty.json', import.meta.url)));
 const step = (text) => console.log('\n' + text);
 const say = (text) => console.log('   ' + text);
 const short = (address) => address.slice(0, 6) + '…' + address.slice(-4);
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+const explorer = (hash) => 'https://explore.qore.network/tx/' + hash;
 
-/** An AI agent: its own keys, its own QorePact connection, and a little judgement. */
+/** An AI agent: its own keys, its own Treaty connection, and a little judgement. */
 class Agent {
-  constructor(name, pact) {
+  constructor(name, treaty) {
     this.name = name;
-    this.pact = pact;
-    this.address = pact.address;
+    this.treaty = treaty;
+    this.address = treaty.address;
   }
 
   toString() { return this.name + ' (' + short(this.address) + ')'; }
 }
 
-const diana = await startDiana({ abi });
+/** Where the story runs: the local stand-in, or Diana itself. */
+async function localNetwork() {
+  const { startDiana } = await import('../scripts/local-diana.mjs');
+  const diana = await startDiana({ abi });
+  const hash = await diana.wallet.deployContract({ account: diana.accounts[0], abi, bytecode: artifact.bytecode, args: ['qorechain-diana'] });
+  const contract = (await diana.client.waitForTransactionReceipt({ hash })).contractAddress;
+  diana.useContract(contract);
+  return {
+    name: 'a local QoreChain Diana stand-in', contract, rpc: diana.url, rest: diana.url, review: 120, deadlineIn: 3600,
+    async party(name) {
+      const mnemonic = generateMnemonic();
+      const signer = await loadSigner({ QORE_MNEMONIC: mnemonic });
+      await diana.fund(signer.address, parseEther('50'));
+      await diana.registerKey(signer.address, signer.publicKey);
+      return new Agent(name, await Treaty.connect({ contract, rpc: diana.url, rest: diana.url, mnemonic }));
+    },
+    now: async () => (await diana.client.getBlock()).timestamp,
+    wait: (seconds) => diana.advance(seconds),
+    stats: () => diana.stats.verified + ' ML-DSA-87 signatures checked and accepted; ' + diana.stats.refused + ' forged ones refused.',
+    stop: () => diana.stop(),
+    diana,
+  };
+}
+
+async function dianaNetwork() {
+  const contract = process.env.VITE_TREATY_ADDRESS;
+  if (!isAddress(contract ?? '')) throw new Error('No Treaty deployment in .env.diana. Run: npm run accounts -- deploy');
+  const roles = { 'Olivia, a human': 'OWNER', 'Research agent': 'RESEARCHER', 'Data agent': 'DATA', 'Cleaning agent': 'CLEANER' };
+  let client;
+  return {
+    name: 'QoreChain Diana', contract, review: 60, deadlineIn: 9 * 60,
+    async party(name) {
+      const mnemonic = process.env['MNEMONIC_' + roles[name]];
+      if (!mnemonic) throw new Error('.env.diana has no MNEMONIC_' + roles[name] + '. Run: npm run accounts -- create');
+      const treaty = await Treaty.connect({ contract, mnemonic });
+      client = treaty.client;
+      const key = await treaty.keyCheck();
+      if (!key.ok) throw new Error(name + ': ' + key.reason + ' Run: npm run accounts -- register');
+      return new Agent(name, treaty);
+    },
+    now: async () => (await client.getBlock()).timestamp,
+    /** Real time passes on Diana: wait until the chain's clock has moved on. */
+    async wait(seconds) {
+      const target = (await this.now()) + BigInt(seconds);
+      say('Waiting ' + seconds + ' seconds of chain time on Diana…');
+      while ((await this.now()) < target) await sleep(5000);
+    },
+    stats: () => 'Every signature above was checked by Diana’s own pqcVerify precompile.',
+    stop: async () => {},
+  };
+}
+
+let network;
+try {
+  network = live ? await dianaNetwork() : await localNetwork();
+} catch (error) {
+  console.error('The demo could not start: ' + explain(error));
+  process.exit(1);
+}
+const record = { network: live ? 'qorechain-diana' : 'local', contract: network.contract, startedAt: new Date().toISOString(), parties: {}, steps: [] };
+/** Keep each transaction for the record, and show its explorer link on Diana. */
+function track(label, result) {
+  const receipt = result?.receipt ?? result;
+  if (receipt?.transactionHash) {
+    record.steps.push({ step: label, tx: receipt.transactionHash, block: String(receipt.blockNumber) });
+    if (live) say('  ↳ ' + explorer(receipt.transactionHash));
+  }
+  return result;
+}
+
 let vite;
 async function shutdown() {
   vite?.kill();
-  await diana.stop();
+  await network.stop();
 }
 process.on('SIGINT', () => { void shutdown().then(() => process.exit(0)); });
 
 try {
-  // The deployment and the parties.
-  const deployer = diana.accounts[0];
-  const hash = await diana.wallet.deployContract({ account: deployer, abi, bytecode: artifact.bytecode });
-  const contract = (await diana.client.waitForTransactionReceipt({ hash })).contractAddress;
-  diana.useContract(contract);
+  const olivia = await network.party('Olivia, a human');
+  const researcher = await network.party('Research agent');
+  const databot = await network.party('Data agent');
+  const cleaner = await network.party('Cleaning agent');
+  for (const agent of [olivia, researcher, databot, cleaner]) record.parties[agent.name] = agent.address;
 
-  async function party(name) {
-    const mnemonic = generateMnemonic();
-    const signer = await loadSigner({ QORE_MNEMONIC: mnemonic });
-    await diana.fund(signer.address, parseEther('50'));
-    await diana.registerKey(signer.address, signer.publicKey);
-    const pact = await QorePact.connect({ contract, rpc: diana.url, rest: diana.url, mnemonic });
-    return new Agent(name, pact);
-  }
-  const olivia = await party('Olivia, a human');
-  const researcher = await party('Research agent');
-  const databot = await party('Data agent');
-  const cleaner = await party('Cleaning agent');
-
-  console.log('QorePact demo on a local QoreChain Diana stand-in. Every party has its own ML-DSA-87 key.');
+  console.log('Treaty demo on ' + network.name + '. Every party has its own ML-DSA-87 key.');
+  console.log('Treaty contract: ' + network.contract);
   say(olivia + ' owns the research agent.');
   say(researcher + ' needs survey data cleaned.');
   say(databot + ' and ' + cleaner + ' sell data cleaning as a team, 80/20.');
 
   step('1. Olivia puts her agent on a budget');
+  const already = await researcher.treaty.mandate();
+  const committed = already?.committed ?? 0n;
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 7 * 86400);
-  const limits = { owner: olivia.address, maxPerPact: parseEther('10'), maxTotal: parseEther('15'), expiry };
-  const agentSignature = await researcher.pact.approveOwner(limits);
-  await olivia.pact.setMandate({ agent: researcher.address, ...limits, agentSignature });
-  say('Both signed with ML-DSA-87: at most 10 QOR per pact, 15 QOR in total, for 7 days. The contract enforces it.');
+  const limits = { owner: olivia.address, maxPerTreaty: parseEther('10'), maxTotal: committed + parseEther('15'), expiry };
+  const agentSignature = await researcher.treaty.approveOwner(limits);
+  track('owner sets the agent’s limits', await olivia.treaty.setMandate({ agent: researcher.address, ...limits, agentSignature }));
+  say('Both signed with ML-DSA-87: at most 10 QOR per treaty, 15 QOR more in total, for 7 days. The contract enforces it.');
 
   step('2. The research agent proposes a deal');
-  const deadline = (await diana.client.getBlock()).timestamp + 3600n;
-  const id = await researcher.pact.proposeService({
-    title: 'Clean five survey datasets', unitPrice: '2', maxUnits: 5, deadline, reviewPeriod: 120,
+  const deadline = (await network.now()) + BigInt(network.deadlineIn);
+  const terms = {
+    title: 'Clean five survey datasets', unitPrice: '2', maxUnits: 5, deadline, reviewPeriod: network.review,
     client: researcher.address, providers: [databot.address, cleaner.address], shares: [8000, 2000],
-  });
-  say('Pact #' + id + ': 2 QOR per cleaned dataset, up to 5, within an hour. The client has 2 minutes to review each delivery.');
+  };
+  const id = await researcher.treaty.proposeService(terms);
+  record.treaty = String(id);
+  say('Treaty #' + id + ': 2 QOR per cleaned dataset, up to 5, within ' + Math.round(network.deadlineIn / 60) +
+    ' minutes. The client has ' + network.review + ' seconds to review each delivery.');
 
   step('3. Every party reads the terms and signs them');
   for (const agent of [databot, cleaner, researcher]) {
-    const terms = await agent.pact.agreement(id);
-    await agent.pact.sign(id);
-    say(agent + ' checked "' + terms.title + '" and signed.');
+    const agreement = await agent.treaty.agreement(id);
+    track(agent.name + ' signs the terms', await agent.treaty.sign(id));
+    say(agent + ' checked "' + agreement.title + '" and signed.');
   }
-  say('All signed: the pact is live, and its terms are recorded on QoreChain Native.');
+  say('All signed: the treaty is live, and its terms are recorded on QoreChain Native.');
 
   step('4. The research agent locks the budget');
-  await researcher.pact.fund(id);
+  track('the client locks the budget', await researcher.treaty.fund(id));
   say('10 QOR is locked in the contract. The data team can see it is there before they start.');
-  const greedy = await researcher.pact.proposeService({
-    title: 'Label 5,000 images', unitPrice: '1', maxUnits: 10, deadline, reviewPeriod: 120,
-    client: researcher.address, providers: [databot.address], shares: [10000],
-  });
-  await databot.pact.sign(greedy);
+  const greedy = await researcher.treaty.proposeService({ ...terms, title: 'Label 5,000 images', unitPrice: '1', maxUnits: 10, providers: [databot.address], shares: [10000] });
+  track('a second treaty for the data agent', await databot.treaty.sign(greedy));
   try {
-    await researcher.pact.sign(greedy);
-    say('Unexpected: a second 10 QOR pact was accepted.');
+    await researcher.treaty.sign(greedy);
+    say('Unexpected: a second 10 QOR treaty was accepted.');
   } catch (error) {
     say('It tries to commit another 10 QOR elsewhere: refused (' + explain(error) + '). Olivia’s limit holds.');
   }
@@ -120,38 +186,39 @@ try {
     if (data.rows < 1000 || data.nulls > 0) return 'only ' + data.rows + ' rows with ' + data.nulls + ' empty values';
   };
   for (const [i, content] of datasets.slice(0, 2).entries()) {
-    const { unit } = await databot.pact.deliver(id, content);
-    const delivery = await researcher.pact.read('getDelivery', [id, unit]);
+    const { unit } = track('the data agent delivers dataset ' + (i + 1), await databot.treaty.deliver(id, content));
+    const delivery = await researcher.treaty.read('getDelivery', [id, unit]);
     const problem = judge(content, delivery.deliverable);
     if (problem) {
-      await researcher.pact.reject(id, unit);
+      track('the client rejects it', await researcher.treaty.reject(id, unit));
       say('Dataset ' + (i + 1) + ' delivered. The research agent rejects it: ' + problem + '. Nothing is paid.');
     } else {
-      await researcher.pact.accept(id, unit);
+      track('the client accepts it', await researcher.treaty.accept(id, unit));
       say('Dataset ' + (i + 1) + ' delivered. The research agent checks it and accepts: 1.6 QOR to the data agent, 0.4 to the cleaner.');
     }
   }
-  const { unit: late } = await databot.pact.deliver(id, datasets[2]);
+  const { unit: late } = track('the data agent delivers a fixed dataset', await databot.treaty.deliver(id, datasets[2]));
   say('Dataset 2 is delivered again, fixed. This time the research agent is busy and does not answer.');
-  await diana.advance(121);
-  await cleaner.pact.release(id, late);
-  say('Two minutes later anyone may release it, and the cleaning agent does: the team is paid without waiting.');
+  await network.wait(network.review + 1);
+  track('the cleaning agent releases the ignored delivery', await cleaner.treaty.release(id, late));
+  say('After the review period anyone may release it, and the cleaning agent does: the team is paid without waiting.');
 
   step('6. An attacker steals the data agent’s wallet key');
   const thief = '0x000000000000000000000000000000000000dEaD';
-  const stolen = privateKeyToAccount(databot.pact.signer.privateKey);
+  const stolen = privateKeyToAccount(databot.treaty.signer.privateKey);
   const forge = (message) => toHex(pqcSign(generatePqcKeypair().secretKey, hexToBytes(message)));
-  const earnings = await databot.pact.read('claimable', [databot.address]);
-  const nonce = await databot.pact.read('nonces', [databot.address]);
+  const earnings = await databot.treaty.read('claimable', [databot.address]);
+  const nonce = await databot.treaty.read('nonces', [databot.address]);
+  const { deliveries } = await databot.treaty.read('getAgreement', [id]);
   const attempts = [
     ['withdraw its ' + qor(earnings), 'withdraw', [databot.address, thief, earnings,
-      forge(await databot.pact.read('withdrawalMessage', [databot.address, thief, earnings, nonce]))]],
+      forge(await databot.treaty.read('withdrawalMessage', [databot.address, thief, earnings, nonce]))]],
     ['deliver junk to get paid', 'deliver', [id, databot.address, deliverableHash('junk'),
-      forge(await databot.pact.read('deliveryMessage', [id, 3n, databot.address, deliverableHash('junk')]))]],
+      forge(await databot.treaty.read('deliveryMessage', [id, BigInt(deliveries), databot.address, deliverableHash('junk')]))]],
   ];
   for (const [what, functionName, args] of attempts) {
     try {
-      await databot.pact.client.simulateContract({ account: stolen, address: contract, abi, functionName, args });
+      await databot.treaty.client.simulateContract({ account: stolen, address: network.contract, abi, functionName, args });
       say('Unexpected: the attacker managed to ' + what + '.');
     } catch (error) {
       say('With the classical key alone it tries to ' + what + ': BLOCKED (' + explain(error) + ').');
@@ -159,40 +226,48 @@ try {
   }
 
   step('7. Olivia switches her agent off');
-  await olivia.pact.revoke(researcher.address);
-  const { unit: after } = await databot.pact.deliver(id, JSON.stringify({ survey: 'east', rows: 1500, nulls: 0 }));
+  track('the owner switches the agent off', await olivia.treaty.revoke(researcher.address));
+  const { unit: after } = track('the data agent delivers another dataset', await databot.treaty.deliver(id, JSON.stringify({ survey: 'east', rows: 1500, nulls: 0 })));
   try {
-    await researcher.pact.accept(id, after);
+    await researcher.treaty.accept(id, after);
   } catch (error) {
     say('The research agent can no longer sign anything: ' + explain(error) + '.');
   }
 
   step('8. The deadline passes');
-  await diana.advance(3600);
-  await cleaner.pact.release(id, after);
+  const remaining = Number(deadline - (await network.now())) + 1;
+  if (remaining > 0) await network.wait(remaining);
+  track('the cleaning agent releases the last delivery', await cleaner.treaty.release(id, after));
   say('The last delivery was never reviewed, so it is released and paid.');
-  const before = await diana.client.getBalance({ address: olivia.address });
-  await databot.pact.refund(id);
-  const returned = (await diana.client.getBalance({ address: olivia.address })) - before;
+  const before = await databot.treaty.client.getBalance({ address: olivia.address });
+  track('the unused budget goes back', await databot.treaty.refund(id));
+  const returned = (await databot.treaty.client.getBalance({ address: olivia.address })) - before;
   say('The unused budget, ' + qor(returned) + ', goes back to Olivia, not to the switched-off agent.');
 
   step('9. The team withdraws with their post-quantum keys');
   for (const agent of [databot, cleaner]) {
-    const amount = await agent.pact.read('claimable', [agent.address]);
-    await agent.pact.withdraw('all');
+    const amount = await agent.treaty.read('claimable', [agent.address]);
+    track(agent.name + ' withdraws', await agent.treaty.withdraw('all'));
     say(agent + ' withdrew ' + qor(amount) + '.');
   }
 
-  const pact = await researcher.pact.agreement(id);
+  const treaty = await researcher.treaty.agreement(id);
   step('Done');
-  say('Pact #' + id + ': ' + pact.sales + ' datasets paid, 1 rejected, budget settled.');
-  say(diana.stats.verified + ' ML-DSA-87 signatures checked and accepted; ' + diana.stats.refused + ' forged ones refused.');
+  say('Treaty #' + id + ': ' + treaty.sales + ' datasets paid, 1 rejected, budget settled.');
+  say(network.stats());
+  if (live) {
+    record.finishedAt = new Date().toISOString();
+    await mkdir(new URL('../deployments/', import.meta.url), { recursive: true });
+    await writeFile(new URL('../deployments/diana-demo.json', import.meta.url), JSON.stringify(record, null, 2) + '\n');
+    say('Saved every transaction to deployments/diana-demo.json. List these addresses on your project page:');
+    for (const [name, address] of Object.entries(record.parties)) say('  ' + name + ': ' + address);
+  }
 
   if (serve) {
     const viteBin = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
     vite = spawn(process.execPath, [viteBin, '--port', '5173'], {
       cwd: root, stdio: ['ignore', 'pipe', 'inherit'],
-      env: { ...process.env, VITE_QOREPACT_ADDRESS: contract, VITE_QOREPACT_RPC: diana.url, QORE_NATIVE_REST: diana.url },
+      env: { ...process.env, VITE_TREATY_ADDRESS: network.contract, VITE_TREATY_RPC: network.rpc, QORE_NATIVE_REST: network.rest },
     });
     let log = '';
     const url = await new Promise((resolve, reject) => {
@@ -204,9 +279,9 @@ try {
       });
     });
     step('The web app is running on this chain:');
-    say('Pact      ' + url + '/#agreement/' + contract + '/' + id);
-    say('Agent     ' + url + '/#statement/' + contract + '/' + researcher.address);
-    say('Provider  ' + url + '/#statement/' + contract + '/' + databot.address);
+    say('Treaty    ' + url + '/#agreement/' + network.contract + '/' + id);
+    say('Agent     ' + url + '/#statement/' + network.contract + '/' + researcher.address);
+    say('Provider  ' + url + '/#statement/' + network.contract + '/' + databot.address);
     say('Press Ctrl+C to stop.');
     await once(vite, 'exit');
   }
