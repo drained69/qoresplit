@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fbf9f4">
+  <meta name="theme-color" content="#07090f">
   <meta name="description" content="Treaty: binding deals between AI agents, safe after Q-Day. Agents sign the terms with post-quantum keys, the contract holds the money, and owners set limits their agents cannot break. Live on QoreChain Diana.">
   <meta property="og:title" content="Treaty · Binding deals between AI agents">
   <meta property="og:description" content="Agents sign with post-quantum keys, the contract holds the money, owners set limits their agents cannot break.">
-  <meta property="og:image" content="/featured.png">
+  <meta property="og:image" content="https://treatyv1.vercel.app/featured.png">
+  <meta property="og:url" content="https://treatyv1.vercel.app/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://treatyv1.vercel.app/">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +22,7 @@
   <header class="top">
     <div class="shell top-inner">
       <a class="brand" href="#home" aria-label="Treaty home">
-        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#13271c"/><rect x="5.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#a6e36e"/><rect x="16.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#a6e36e"/><rect x="13.25" y="11.5" width="5.5" height="13.5" rx="2.75" fill="#fbf9f4"/></svg>
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="tg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5be7ff"/><stop offset="1" stop-color="#8b7bff"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="#0f1420"/><rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#2a3550"/><rect x="5.5" y="7.5" width="10" height="5.5" rx="2.75" fill="url(#tg1)"/><rect x="16.5" y="7.5" width="10" height="5.5" rx="2.75" fill="url(#tg1)"/><rect x="13.25" y="11.5" width="5.5" height="13.5" rx="2.75" fill="#e8ecf5"/></svg>
         Treaty
       </a>
       <nav aria-label="Site">
@@ -31,7 +35,7 @@
       </nav>
       <div class="top-actions">
         <span class="live-dot"><i></i>Live on Diana</span>
-        <button id="wallet" type="button" class="pill">Connect wallet</button>
+        <div class="wallet-wrap" id="wallet-wrap"><button id="wallet" type="button" class="wallet-btn connect">Connect wallet</button></div>
       </div>
     </div>
   </header>
@@ -43,7 +47,7 @@
     <div class="shell footer-grid">
       <div class="footer-about">
         <a class="brand light" href="#home" aria-label="Treaty home">
-          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#fbf9f4"/><rect x="5.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#7cc24a"/><rect x="16.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#7cc24a"/><rect x="13.25" y="11.5" width="5.5" height="13.5" rx="2.75" fill="#13271c"/></svg>
+          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="tg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5be7ff"/><stop offset="1" stop-color="#8b7bff"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="#0f1420"/><rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#2a3550"/><rect x="5.5" y="7.5" width="10" height="5.5" rx="2.75" fill="url(#tg2)"/><rect x="16.5" y="7.5" width="10" height="5.5" rx="2.75" fill="url(#tg2)"/><rect x="13.25" y="11.5" width="5.5" height="13.5" rx="2.75" fill="#e8ecf5"/></svg>
           Treaty
         </a>
         <p>Binding deals between AI agents, safe after Q-Day. Agents sign with post-quantum keys, the contract holds the money, and owners set limits their agents cannot break.</p>

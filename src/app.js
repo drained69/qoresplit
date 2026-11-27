@@ -1,9 +1,9 @@
 import './style.css';
-import { formatEther } from 'viem';
+import { formatEther, getAddress, isAddress } from 'viem';
 import {
   address, chainTime, checkWindow, cosmosHashOf, describeTransaction, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
   getRefundable, getStatement, getUnitPayments, getWithdrawals, parsePrice, parseRequest, parseShare, pqcKeyStatus,
-  requestWallet, selectWallet, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
+  requestWallet, switchToDiana, listWallets, walletChainId, authorizedAccount, balanceOf, DIANA_CHAIN_ID, qorAddressOf, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
 } from './chain.js';
 import { MAX_PARTIES, deliverableHash } from './protocol.js';
 import { qorexAvailable, signWithQorex } from './qorex.js';
@@ -11,7 +11,6 @@ import { homeHtml, liveFacts, liveHtml, liveParties, liveStateHtml } from './sto
 
 const content = document.querySelector('#content');
 const status = document.querySelector('#status');
-const walletButton = document.querySelector('#wallet');
 let provider;
 let account;
 let rendering = 0;
@@ -59,29 +58,209 @@ const stateLabel = {
 };
 const deliveryLabel = { Pending: 'Waiting for review', Accepted: 'Accepted · paid', Rejected: 'Rejected', Released: 'Released · paid' };
 
-function refreshWalletLabel() {
-  walletButton.textContent = account ? short(account) : 'Connect wallet';
-  walletButton.title = account ?? 'Connect MetaMask or a compatible EVM wallet';
+// ----------------------------------------------------------------- wallet
+// A standard connect flow: a wallet picker (EIP-6963), an account menu, the network, and a session
+// that is remembered. The EVM wallet sends transactions; QoreX adds the post-quantum signatures.
+const WALLET_KEY = 'treaty.wallet';
+const walletWrap = document.querySelector('#wallet-wrap');
+let walletId;
+let chainOk = true;
+let menuOpen = false;
+let balance;
+const shortBalance = (wei) => Number(formatEther(wei)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' QOR';
+const remember = (id) => { try { id ? localStorage.setItem(WALLET_KEY, id) : localStorage.removeItem(WALLET_KEY); } catch {} };
+const remembered = () => { try { return localStorage.getItem(WALLET_KEY) ?? undefined; } catch { return undefined; } };
+
+/** A small deterministic avatar for an address, in the site's colours. */
+function avatar(value, size = '') {
+  const bytes = value.slice(2).match(/../g).map((byte) => parseInt(byte, 16));
+  const hue = (i) => (bytes[i] * 360) / 256;
+  const cells = Array.from({ length: 16 }, (_, i) => bytes[4 + i] > 120
+    ? `<rect x="${(i % 4) * 8}" y="${Math.floor(i / 4) * 8}" width="8" height="8" fill="#ffffff" opacity="${(0.08 + (bytes[4 + i] % 5) / 20).toFixed(2)}"/>` : '').join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue(0)},90%,62%)"/><stop offset="1" stop-color="hsl(${hue(1)},80%,58%)"/></linearGradient></defs><rect width="32" height="32" fill="url(#a)"/>${cells}</svg>`;
+  return `<img class="avatar ${size}" alt="" src="data:image/svg+xml,${encodeURIComponent(svg)}">`;
 }
 
-function attachWalletEvents(selected) {
-  selected.on?.('accountsChanged', (accounts) => {
-    account = accounts[0];
-    refreshWalletLabel();
-    if (location.hash === '#earnings' && !busy) void render();
+function renderWallet() {
+  if (!account) {
+    walletWrap.innerHTML = '<button id="wallet" type="button" class="wallet-btn connect" aria-haspopup="dialog">Connect wallet</button>';
+  } else if (!chainOk) {
+    walletWrap.innerHTML = `<button id="wallet" type="button" class="wallet-btn wrong" aria-haspopup="menu" aria-expanded="${menuOpen}">Wrong network <span class="chev">▾</span></button>` + walletMenu();
+  } else {
+    walletWrap.innerHTML = `<button id="wallet" type="button" class="wallet-btn" aria-haspopup="menu" aria-expanded="${menuOpen}" title="${escape(account)}">${avatar(account)}<span>${short(account)}</span><span class="net-badge">Diana</span><span class="chev">▾</span></button>` + walletMenu();
+  }
+  walletWrap.querySelector('#wallet').onclick = (event) => {
+    event.stopPropagation();
+    if (!account) void run(async () => { await connect({ choose: true }); alert('Wallet connected · ' + account, 'success'); });
+    else { menuOpen = !menuOpen; renderWallet(); if (menuOpen) void refreshBalance(); }
+  };
+  walletWrap.querySelector('.wallet-menu')?.addEventListener('click', onMenu);
+}
+
+function walletMenu() {
+  const name = listWallets().find((wallet) => wallet.id === walletId)?.name ?? 'Wallet';
+  const qor = qorAddressOf(account);
+  const pq = qorexAvailable()
+    ? '<div class="wm-pq ok"><b>QoreX detected.</b> Post-quantum (ML-DSA-87) signing is ready in this browser.</div>'
+    : '<div class="wm-pq"><b>QoreX not found.</b> Add the QoreX wallet to sign with your ML-DSA-87 key here, or use the signing tool.</div>';
+  return `<div class="wallet-menu" role="menu" ${menuOpen ? '' : 'hidden'}>
+    <div class="wm-head">${avatar(account, 'lg')}<span><strong>${short(account)}</strong><small title="${escape(qor)}">${escape(qor.slice(0, 12) + '…' + qor.slice(-6))}</small></span>
+      <span class="net-badge ${chainOk ? '' : 'bad'}">${chainOk ? 'Diana' : 'Wrong chain'}</span></div>
+    <div class="wm-balance"><span>Balance on Diana<small>via ${escape(name)}</small></span><b id="wm-balance">${balance === undefined ? '…' : shortBalance(balance)}</b></div>
+    ${chainOk ? '' : '<button class="wm-item attention" data-act="switch" role="menuitem"><i>⇄</i>Switch to QoreChain Diana</button>'}
+    <button class="wm-item" data-act="copy" role="menuitem"><i>⧉</i>Copy 0x address</button>
+    <button class="wm-item" data-act="copy-qor" role="menuitem"><i>⧉</i>Copy qor1 address</button>
+    ${address ? `<a class="wm-item" href="#${contractRoute('statement', account)}" data-act="close" role="menuitem"><i>◎</i>My earnings and limits</a>` : ''}
+    ${pq}
+    <div class="wm-sep"></div>
+    <button class="wm-item" data-act="change" role="menuitem"><i>↺</i>Change wallet</button>
+    <button class="wm-item danger" data-act="disconnect" role="menuitem"><i>⏻</i>Disconnect</button></div>`;
+}
+
+async function refreshBalance() {
+  if (!account) return;
+  const owner = account;
+  const value = await balanceOf(owner).catch(() => undefined);
+  if (owner !== account) return;
+  balance = value;
+  const target = document.querySelector('#wm-balance');
+  if (target) target.textContent = value === undefined ? 'unavailable' : shortBalance(value);
+}
+
+async function onMenu(event) {
+  const act = event.target.closest('[data-act]')?.dataset.act;
+  if (!act) return;
+  event.stopPropagation();
+  const copy = async (text, what) => {
+    try { await navigator.clipboard.writeText(text); alert(what + ' copied.', 'success'); } catch { alert(text); }
+  };
+  if (act === 'copy') await copy(account, 'Address');
+  else if (act === 'copy-qor') await copy(qorAddressOf(account), 'qor1 address');
+  else if (act === 'switch') {
+    await run(async () => { await switchToDiana(provider); await refreshChain(); alert('Switched to QoreChain Diana.', 'success'); });
+    return;
+  } else if (act === 'change') {
+    menuOpen = false;
+    await run(async () => { await connect({ choose: true, fresh: true }); alert('Wallet connected · ' + account, 'success'); });
+    return;
+  } else if (act === 'disconnect') disconnect();
+  menuOpen = false;
+  renderWallet();
+}
+
+function disconnect() {
+  provider?.removeListener?.('accountsChanged', onAccounts);
+  provider?.removeListener?.('chainChanged', onChain);
+  provider = account = walletId = balance = undefined;
+  chainOk = true;
+  menuOpen = false;
+  remember();
+  renderWallet();
+  alert('Wallet disconnected from Treaty.', 'info');
+  if (location.hash.startsWith('#earnings') && !busy) void render();
+void restoreWallet();
+}
+
+function onAccounts(accounts) {
+  const next = accounts?.[0];
+  if (!next) { disconnect(); return; }
+  account = getAddressSafe(next);
+  balance = undefined;
+  renderWallet();
+  if (location.hash === '#earnings' && !busy) void render();
+void restoreWallet();
+}
+const getAddressSafe = (value) => (isAddress(value ?? '') ? getAddress(value) : account);
+function onChain(id) { chainOk = Number(id) === DIANA_CHAIN_ID; renderWallet(); }
+async function refreshChain() {
+  const id = await walletChainId(provider);
+  chainOk = id === undefined || id === DIANA_CHAIN_ID;
+  renderWallet();
+}
+
+function use(wallet) {
+  if (provider && provider !== wallet.provider) {
+    provider.removeListener?.('accountsChanged', onAccounts);
+    provider.removeListener?.('chainChanged', onChain);
+  }
+  provider = wallet.provider;
+  walletId = wallet.id;
+  provider.on?.('accountsChanged', onAccounts);
+  provider.on?.('chainChanged', onChain);
+}
+
+/** The wallet picker. Resolves with the chosen wallet; rejects if closed. */
+function chooseWallet() {
+  return new Promise((resolve, reject) => {
+    const wallets = listWallets();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const option = (wallet, i) => `<button class="wallet-option" data-i="${i}" type="button">${wallet.icon && /^data:image\//.test(wallet.icon)
+      ? `<img src="${escape(wallet.icon)}" alt="">` : '<span class="wicon">◈</span>'}<span>${escape(wallet.name)}<small>${wallet.id === walletId ? 'Connected' : 'Detected in this browser'}</small></span>
+      ${remembered() === wallet.id ? '<span class="tag-right">Last used</span>' : ''}</button>`;
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="wallet-title">
+      <div class="modal-head"><h2 id="wallet-title">Connect a wallet</h2><button class="modal-close" type="button" aria-label="Close">✕</button></div>
+      <p>Your EVM wallet sends Treaty transactions on QoreChain Diana (chain ID 9800). Treaty never sees your keys.</p>
+      <div class="modal-group">${wallets.length ? 'Detected wallets' : 'No EVM wallet found'}</div>
+      <div class="wallet-list">${wallets.length ? wallets.map(option).join('') : `
+        <a class="wallet-option" href="https://metamask.io/download/" target="_blank" rel="noreferrer"><span class="wicon">🦊</span><span>Install MetaMask<small>Or any EVM wallet, then reload this page</small></span><span class="tag-right dim">Get ↗</span></a>`}</div>
+      <div class="modal-group">Post-quantum signing</div>
+      <div class="wallet-list"><div class="wallet-option" style="cursor:default"><span class="wicon">⬡</span><span>QoreX<small>${qorexAvailable() ? 'Detected: signs your ML-DSA-87 approvals' : 'Signs ML-DSA-87 approvals in the browser'}</small></span>
+        <span class="tag-right ${qorexAvailable() ? '' : 'dim'}">${qorexAvailable() ? 'Ready' : 'Optional'}</span></div></div>
+      <div class="modal-foot">Agents and people sign the terms, deliveries and withdrawals with ML-DSA-87; the EVM wallet only pays gas and sends. New to Diana? <a href="https://dashboard.qorechain.io/faucet" target="_blank" rel="noreferrer">Get test QOR ↗</a></div></div>`;
+    const close = (error) => {
+      backdrop.remove();
+      document.removeEventListener('keydown', onKey);
+      if (error) reject(error);
+    };
+    const onKey = (event) => { if (event.key === 'Escape') close(new Error('Wallet connection cancelled.')); };
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop || event.target.closest('.modal-close')) { close(new Error('Wallet connection cancelled.')); return; }
+      const pick = event.target.closest('[data-i]');
+      if (pick) { close(); resolve(wallets[Number(pick.dataset.i)]); }
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.append(backdrop);
+    backdrop.querySelector('.wallet-option, .modal-close')?.focus();
   });
 }
 
-async function connect() {
-  if (!provider) {
-    provider = selectWallet();
-    if (!provider) throw new Error('Open Treaty in a browser with MetaMask or a compatible EVM wallet.');
-    attachWalletEvents(provider);
+/**
+ * The connected account. Opens the wallet picker when asked to, or when the choice is not obvious:
+ * a remembered wallet or the only wallet in the browser is used directly.
+ */
+async function connect({ choose = false, fresh = false } = {}) {
+  if (!provider || fresh) {
+    const wallets = listWallets();
+    const known = wallets.find((wallet) => wallet.id === remembered());
+    const wallet = !choose && !fresh && (known ?? (wallets.length === 1 ? wallets[0] : undefined)) || await chooseWallet();
+    use(wallet);
   }
   account = await requestWallet(provider);
-  refreshWalletLabel();
+  remember(walletId);
+  balance = undefined;
+  await refreshChain();
   return account;
 }
+
+/** Restore a remembered session quietly, without a wallet prompt. */
+async function restoreWallet() {
+  const id = remembered();
+  if (!id) { renderWallet(); return; }
+  await new Promise((resolve) => setTimeout(resolve, 250)); // let wallets announce themselves
+  const wallet = listWallets().find((candidate) => candidate.id === id);
+  const found = wallet && await authorizedAccount(wallet.provider);
+  if (!found) { renderWallet(); return; }
+  use(wallet);
+  account = found;
+  await refreshChain();
+}
+document.addEventListener('click', (event) => {
+  if (menuOpen && !walletWrap.contains(event.target)) { menuOpen = false; renderWallet(); }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && menuOpen) { menuOpen = false; renderWallet(); }
+});
 
 async function run(action) {
   if (busy) return;
@@ -922,17 +1101,6 @@ async function render() {
   }
 }
 
-walletButton.onclick = () => void run(async (route) => {
-  const signer = await connect();
-  if (location.href !== route) return;
-  if (location.hash === '#earnings') await render();
-  else {
-    const state = await checkWindow(signer).catch(() => undefined);
-    if (location.href !== route) return;
-    alert(state?.problem
-      ? 'Wallet connected, but ' + state.qorAddress + ' ' + state.problem + '. Open one before sending.'
-      : 'Wallet connected · ' + signer, state?.problem ? 'info' : 'success');
-  }
-});
 window.addEventListener('hashchange', render);
 void render();
+void restoreWallet();
