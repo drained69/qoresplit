@@ -94,21 +94,48 @@ export function validateService({ title, priceText, unitsText, deadline, reviewM
 }
 
 const announcedWallets = new Map();
+const isQorexProvider = (provider, rdns = '') => provider?.isQoreX || rdns === 'network.qore.qorex';
 window.addEventListener('eip6963:announceProvider', ({ detail }) => {
-  if (detail?.info?.rdns && typeof detail.provider?.request === 'function') {
-    announcedWallets.set(detail.info.rdns, detail.provider);
+  const info = detail?.info;
+  if (info?.rdns && typeof detail.provider?.request === 'function' && !isQorexProvider(detail.provider, info.rdns)) {
+    announcedWallets.set(info.rdns, { id: info.rdns, name: String(info.name || info.rdns).slice(0, 40), icon: info.icon, provider: detail.provider });
   }
 });
 window.dispatchEvent(new Event('eip6963:requestProvider'));
 
-export function selectWallet() {
+/**
+ * The EVM wallets in this browser (EIP-6963), or the injected one for wallets that do not announce.
+ * QoreX is left out: it signs Treaty's post-quantum messages, while an EVM wallet sends the transactions.
+ */
+export function listWallets() {
   window.dispatchEvent(new Event('eip6963:requestProvider'));
-  const listed = window.ethereum?.providers ?? [window.ethereum];
-  return announcedWallets.get('io.metamask') ??
-    listed.find((provider) => provider?.isMetaMask && !provider?.isQoreX) ??
-    [...announcedWallets].find(([rdns, provider]) => rdns !== 'network.qore.qorex' && !provider.isQoreX)?.[1] ??
-    listed.find((provider) => typeof provider?.request === 'function' && !provider.isQoreX);
+  const wallets = [...announcedWallets.values()];
+  if (!wallets.length) {
+    const listed = window.ethereum?.providers ?? [window.ethereum];
+    const injected = listed.find((provider) => typeof provider?.request === 'function' && !isQorexProvider(provider));
+    if (injected) {
+      const name = injected.isRabby ? 'Rabby' : injected.isCoinbaseWallet ? 'Coinbase Wallet' : injected.isMetaMask ? 'MetaMask' : 'Browser wallet';
+      wallets.push({ id: 'injected', name, provider: injected });
+    }
+  }
+  return wallets.sort((a, b) => (b.id === 'io.metamask') - (a.id === 'io.metamask'));
 }
+
+/** Diana's chain ID as the wallet reports it, or undefined if it will not say. */
+export async function walletChainId(provider) {
+  try { return Number(await provider.request({ method: 'eth_chainId' })); } catch { return undefined; }
+}
+
+/** The account the wallet already allows this site to see, without a prompt. */
+export async function authorizedAccount(provider) {
+  try {
+    const [account] = await provider.request({ method: 'eth_accounts' });
+    return isAddress(account ?? '') ? getAddress(account) : undefined;
+  } catch { return undefined; }
+}
+
+export const balanceOf = (account) => client.getBalance({ address: account });
+export const DIANA_CHAIN_ID = chain.id;
 
 export async function requestWallet(provider) {
   const [account] = await provider.request({ method: 'eth_requestAccounts' });

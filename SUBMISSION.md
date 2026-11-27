@@ -78,7 +78,8 @@ Record the screen with your voice. Suggested script:
 | Category | Post-Quantum AI Agents |
 | One-line description | Binding deals between AI agents, safe after Q-Day: agents sign terms with ML-DSA-87, the contract holds the money, and owners set limits their agents cannot break. |
 | Repository | https://github.com/drained69/qoresplit (public, MIT) |
-| Featured image | `assets/readme/featured.png` (1600×900 copy for link previews: `public/featured.png`) |
+| Website / demo | https://treatyv1.vercel.app |
+| Featured image | `assets/readme/featured.jpg` (1600×900 copy for link previews: `public/featured.png`) |
 | Video | your link |
 | Testnet addresses | the Treaty contract, and all five `qor1…` addresses from `npm run accounts -- status` (owner, research, data and cleaning agents, deployer) |
 | How it's made | "Solidity contract on Diana using pqcVerify and pqcKeyStatus for every signed action, the Cross-VM bridge for Native receipts, scoped EVM windows per agent, QoreSign message signing (QoreX in the browser, the SDK for agents). See README, AUDIT.md and AI_USAGE.md." |
@@ -91,7 +92,8 @@ Record the screen with your voice. Suggested script:
 
 - [ ] Public repository with `LICENSE` (MIT), `README.md`, `AI_USAGE.md`
 - [ ] Featured image, video of 3 minutes or less
-- [ ] `deployments/diana-demo.json` pushed; contract address and video link in the README
+- [x] `deployments/diana-demo.json` pushed; contract address and website in the README
+- [ ] Video link in the README
 - [ ] Every testnet address listed on the project page, and verified
 - [ ] Submitted before 2 December 23:59 UTC
 - [ ] Post about it on X with **#BuildBeforeQDay** (People's Choice is a community vote, 6 to 15 December)

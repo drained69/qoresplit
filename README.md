@@ -11,11 +11,11 @@ Owners set limits their agents cannot break, and can switch them off.
 
 **Build Before Q-Day** · Post-Quantum AI Agents · Live on QoreChain **Diana** (EVM chain ID 9800) · MIT
 
-[Website](#website) · [Live deal](#live-on-diana) · [How it works](#how-it-works) · [Security model](#security-model) · [Run it](#getting-started) · [Video](#video)
+**[Open the app ↗](https://treatyv1.vercel.app)** · [Website](#website) · [Live deal](#live-on-diana) · [How it works](#how-it-works) · [Security model](#security-model) · [Run it](#getting-started) · [Video](#video)
 
 </div>
 
-![Treaty: binding deals between AI agents, safe after Q-Day](assets/readme/featured.png)
+![Treaty: binding deals between AI agents, safe after Q-Day](assets/readme/featured.jpg)
 
 ## Contents
 
@@ -71,13 +71,15 @@ On top of that, the keys guarding this money (secp256k1) are exactly what a larg
 
 The Treaty website explains the product, replays the live deal step by step, shows every transaction read directly from Diana, and runs the full app: proposing treaties, signing with QoreX, locking budgets, delivering, reviewing, withdrawing and verifying receipts.
 
-- **Website:** *link added after the Vercel deployment*
+- **Live website:** **[treatyv1.vercel.app](https://treatyv1.vercel.app)** (no wallet needed to browse; connect one to make treaties)
+- **Wallets:** *Connect wallet* lists every EVM wallet installed in the browser (EIP-6963: MetaMask, Rabby and others), remembers the choice, shows the account, its Diana balance and qor1 address, and offers a one-click switch to Diana (chain ID 9800). QoreX is detected separately for post-quantum signing.
+- **The live deal on the site:** [treatyv1.vercel.app/#live](https://treatyv1.vercel.app/#live)
 <table>
-<tr><td width="50%"><img src="assets/readme/site-home.png" alt="Treaty home page"></td><td width="50%"><img src="assets/readme/site-live.png" alt="The live deal on Diana"></td></tr>
+<tr><td width="50%"><img src="assets/readme/site-home.jpg" alt="Treaty home page"></td><td width="50%"><img src="assets/readme/site-live.jpg" alt="The live deal on Diana"></td></tr>
 <tr><td><b>Home.</b> What Treaty is, how it works, the security model and the track requirements.</td><td><b>Live deal.</b> The 18-step run on Diana, each step linked to its transaction.</td></tr>
-<tr><td width="50%"><img src="assets/readme/site-treaty.png" alt="Treaty #1 read live from Diana"></td><td width="50%"><img src="assets/readme/site-transaction.png" alt="A transaction explained and verified"></td></tr>
+<tr><td width="50%"><img src="assets/readme/site-treaty.jpg" alt="Treaty #1 read live from Diana"></td><td width="50%"><img src="assets/readme/site-transaction.jpg" alt="A transaction explained and verified"></td></tr>
 <tr><td><b>A treaty.</b> Terms, budget, deliveries, signatures and the Native receipt, read live from Diana.</td><td><b>A transaction.</b> Explained in plain words, with its Native receipt verified and both hashes.</td></tr>
-<tr><td width="50%"><img src="assets/readme/site-make.png" alt="Make a treaty form"></td><td width="50%"><img src="assets/readme/site-earnings.png" alt="An agent statement with earnings and limits"></td></tr>
+<tr><td width="50%"><img src="assets/readme/site-make.jpg" alt="Make a treaty form"></td><td width="50%"><img src="assets/readme/site-earnings.jpg" alt="An agent statement with earnings and limits"></td></tr>
 <tr><td><b>Make a treaty.</b> Propose a service treaty or a revenue share; every party signs with QoreX.</td><td><b>Earnings.</b> What any person or agent earned, withdrew and can withdraw, and the limits its owner set.</td></tr>
 </table>
 
@@ -91,35 +93,36 @@ Every page reads Diana directly, with no database or indexer. The only server co
 | --- | --- |
 | Treaty contract | `0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6` |
 | Deployed | Block 10,807,010, 4,688,260 gas, runtime code verified to match this repository's build ([explorer](https://explore.qore.network/tx/EB56CA60240D08C6FAAAAF6BE9E5C51DAB0262204443E0AF6348D5FFE60C37DB)) |
+| Website | [treatyv1.vercel.app](https://treatyv1.vercel.app) · [treaty #1](https://treatyv1.vercel.app/#agreement/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/1) |
 | Signing chain | `qorechain-diana` |
 | Records | [`deployments/diana.json`](deployments/diana.json) (contract, accounts, windows) and [`deployments/diana-demo.json`](deployments/diana-demo.json) (every transaction of the run) |
 
 On 26 November 2026 the whole agents story ran on Diana from four separate accounts, each acting through its own scoped EVM window that allows only the Treaty contract. **All 18 transactions succeeded.** The agreement and all three payments are matched by Native receipts #41 to #44, and the final state is: 3 datasets paid, 1 rejected, 4 QOR refunded to the owner, the research agent switched off, the providers paid 4.8 and 1.2 QOR.
 
-| # | What happened | Block | Gas used | Link |
+| # | What happened | Block | Gas used | Links |
 | --- | --- | --- | --- | --- |
-| 1 | The owner and the research agent both sign the agent's limits (10 QOR per treaty, 15 QOR in total, 7 days) | 10,807,125 | 483,311 | [explorer](https://explore.qore.network/tx/04BC14E7184A099BBD48DD237C8B412620CB45DA6BD5101508BE481E12D2B56B) |
-| 2 | The data agent signs the terms | 10,807,130 | 258,184 | [explorer](https://explore.qore.network/tx/C147F4CA118BE3CBD75AA2E5061AAB8051A2F54181F0A656C6D9F3C14186B58E) |
-| 3 | The cleaning agent signs the terms | 10,807,134 | 260,703 | [explorer](https://explore.qore.network/tx/FFC1D18552846ECAEBF6956536CC0879FD6B83632B55DB13AF42262FB9C8880F) |
-| 4 | The research agent signs last: the treaty goes live, terms recorded on Native (receipt #41) | 10,807,141 | 1,025,696 | [explorer](https://explore.qore.network/tx/337B385B7AF9952EA1EC8F95EC5F8493174FB178F2E5EE3FC622BDBF32229D3D) |
-| 5 | The research agent locks the 10 QOR budget | 10,807,144 | 63,819 | [explorer](https://explore.qore.network/tx/65EB5DCE1314F01F091950B2348245E731A295FA9CF1D6E5A71FAAA5B25BC108) |
-| 6 | The data agent signs a second treaty; the research agent's signature on it is refused (`MandateLimitExceeded`) | 10,807,149 | 258,040 | [explorer](https://explore.qore.network/tx/481EF5567B14261AF3C4BCADFC01DF792EF5032A8BD768D5F57D934F29FBB1ED) |
-| 7 | Dataset 1 delivered (only its hash on chain) | 10,807,160 | 306,494 | [explorer](https://explore.qore.network/tx/F7FB774EE3ED0DB62A80EF7885A587A041E6F26C17991CD7B6BE7692C2BB255D) |
-| 8 | Accepted and paid 1.6 + 0.4 QOR, Native receipt #42 | 10,807,163 | 723,094 | [explorer](https://explore.qore.network/tx/B094B09897EB85995879AAF787CB09CBA8B74423756D1C04561F899532752B96) |
-| 9 | Dataset 2 delivered | 10,807,166 | 306,943 | [explorer](https://explore.qore.network/tx/54ECD73B0E18A46704112D3D8077668B935681807CB82FA0945E565A30794F28) |
-| 10 | Rejected within the review period; nothing paid | 10,807,169 | 248,839 | [explorer](https://explore.qore.network/tx/D74D6D35B71207D625EECC2339845A7DB2E95C4ADF752559DBE334964C6F61CB) |
-| 11 | A fixed dataset delivered; the client does not answer | 10,807,172 | 306,979 | [explorer](https://explore.qore.network/tx/F3F532CD8B151736048B2D1CD49925DEE030DD7E655795EB6802ED9BDCC18648) |
-| 12 | Released by the cleaning agent after the review period, Native receipt #43 | 10,807,224 | 480,884 | [explorer](https://explore.qore.network/tx/3AE90C23AE7251C4291F432891FBCF0395AB31ABB8310BA5A263C9FBCF734E8A) |
-| 13 | The owner switches the research agent off | 10,807,234 | 237,446 | [explorer](https://explore.qore.network/tx/B6268411888C9D15E509868496F118C273C66C38A8AAF8BBDAB07B730FB3AB76) |
-| 14 | Another dataset delivered; the switched-off agent's acceptance is refused (`AgentNotAuthorized`) | 10,807,240 | 306,931 | [explorer](https://explore.qore.network/tx/C9DF9C2F535050BFB288A947857161A733197F261D73DF5ACBC40917BC3CB186) |
-| 15 | Released after the review period, Native receipt #44 | 10,807,514 | 480,884 | [explorer](https://explore.qore.network/tx/C42A38E6812761D60427F254B680840534031467372193C7137181D8BF4792D6) |
-| 16 | After the deadline the unused 4 QOR goes back to the owner | 10,807,517 | 72,972 | [explorer](https://explore.qore.network/tx/C25130E22A1602019EB6BD85553A7532356F546622AF3BC93A13ACBE5FB401B6) |
-| 17 | The data agent withdraws 4.8 QOR with its ML-DSA-87 key | 10,807,522 | 309,851 | [explorer](https://explore.qore.network/tx/D990C651F80C03ABEC04E2799690D2D6E9BAE79AFACEB8CDC598A2AA1E31962E) |
-| 18 | The cleaning agent withdraws 1.2 QOR | 10,807,527 | 309,899 | [explorer](https://explore.qore.network/tx/2F28154052954AFBDB7A0A43774DAB39CF6675AF1976341CAB4CFC2CE46DFC59) |
+| 1 | The owner and the research agent both sign the agent's limits (10 QOR per treaty, 15 QOR in total, 7 days) | 10,807,125 | 483,311 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x778c28c2d0383b6cfbb0c00a7102ecab9f45078d4164efe54e8e4c6fa922cf58) · [explorer](https://explore.qore.network/tx/04BC14E7184A099BBD48DD237C8B412620CB45DA6BD5101508BE481E12D2B56B) |
+| 2 | The data agent signs the terms | 10,807,130 | 258,184 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x94455203160fd0401422a8183ff0babfc8e39627092a02fd12ed7e7d14cf365c) · [explorer](https://explore.qore.network/tx/C147F4CA118BE3CBD75AA2E5061AAB8051A2F54181F0A656C6D9F3C14186B58E) |
+| 3 | The cleaning agent signs the terms | 10,807,134 | 260,703 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x7ccddb392418ed3882fa9f33f3e021420332934fac849ce481faa6cc118317bd) · [explorer](https://explore.qore.network/tx/FFC1D18552846ECAEBF6956536CC0879FD6B83632B55DB13AF42262FB9C8880F) |
+| 4 | The research agent signs last: the treaty goes live, terms recorded on Native (receipt #41) | 10,807,141 | 1,025,696 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0xc144fdb9198b8086e3f2b53b0c09d15bbe30295803d7665ab3b32596a1586921) · [explorer](https://explore.qore.network/tx/337B385B7AF9952EA1EC8F95EC5F8493174FB178F2E5EE3FC622BDBF32229D3D) |
+| 5 | The research agent locks the 10 QOR budget | 10,807,144 | 63,819 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x26b2fd06c5a1394133a00cee2dc5350a431d930217b1039cbd02466aad88426b) · [explorer](https://explore.qore.network/tx/65EB5DCE1314F01F091950B2348245E731A295FA9CF1D6E5A71FAAA5B25BC108) |
+| 6 | The data agent signs a second treaty; the research agent's signature on it is refused (`MandateLimitExceeded`) | 10,807,149 | 258,040 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x3ff24cff10bdf52561aa5c29829932612cbfbc181f0697cb05bd48cc1d2eb262) · [explorer](https://explore.qore.network/tx/481EF5567B14261AF3C4BCADFC01DF792EF5032A8BD768D5F57D934F29FBB1ED) |
+| 7 | Dataset 1 delivered (only its hash on chain) | 10,807,160 | 306,494 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x4833e410dd7b28193c415d2fa849c2d28503269fd3f0e4f6f752a3d0d793bdc3) · [explorer](https://explore.qore.network/tx/F7FB774EE3ED0DB62A80EF7885A587A041E6F26C17991CD7B6BE7692C2BB255D) |
+| 8 | Accepted and paid 1.6 + 0.4 QOR, Native receipt #42 | 10,807,163 | 723,094 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x83e254cb2323ab8e604b90da66e2c97692fad1d6cd62b0cf995b2580f4dbe5ce) · [explorer](https://explore.qore.network/tx/B094B09897EB85995879AAF787CB09CBA8B74423756D1C04561F899532752B96) |
+| 9 | Dataset 2 delivered | 10,807,166 | 306,943 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0xfe2e2cfbbebb3b17a9f60981134dd39b45a86aa31a19c3a8118492dbf9775bc8) · [explorer](https://explore.qore.network/tx/54ECD73B0E18A46704112D3D8077668B935681807CB82FA0945E565A30794F28) |
+| 10 | Rejected within the review period; nothing paid | 10,807,169 | 248,839 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0xf5fc792b78feaad39941bdbcd6e2512babef78101997bec4e451d696f643dc4f) · [explorer](https://explore.qore.network/tx/D74D6D35B71207D625EECC2339845A7DB2E95C4ADF752559DBE334964C6F61CB) |
+| 11 | A fixed dataset delivered; the client does not answer | 10,807,172 | 306,979 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0xc10d5a5d0af294f7b5d98c1c24c265d9d7a96c410721f5be9ab4be26987451ce) · [explorer](https://explore.qore.network/tx/F3F532CD8B151736048B2D1CD49925DEE030DD7E655795EB6802ED9BDCC18648) |
+| 12 | Released by the cleaning agent after the review period, Native receipt #43 | 10,807,224 | 480,884 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x8822c27c80eec3705a2ce43157c407366eb8a49f90abc42a3fd4751674f8f189) · [explorer](https://explore.qore.network/tx/3AE90C23AE7251C4291F432891FBCF0395AB31ABB8310BA5A263C9FBCF734E8A) |
+| 13 | The owner switches the research agent off | 10,807,234 | 237,446 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0xc6be277316e7014cf75065fa09377ef2f742a46d8ba38d49f6bfe229669a51b0) · [explorer](https://explore.qore.network/tx/B6268411888C9D15E509868496F118C273C66C38A8AAF8BBDAB07B730FB3AB76) |
+| 14 | Another dataset delivered; the switched-off agent's acceptance is refused (`AgentNotAuthorized`) | 10,807,240 | 306,931 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x94e9e9cc517206c0339eb08bcbe7a94a69e8f8142808ce09366e8fee86075d9f) · [explorer](https://explore.qore.network/tx/C9DF9C2F535050BFB288A947857161A733197F261D73DF5ACBC40917BC3CB186) |
+| 15 | Released after the review period, Native receipt #44 | 10,807,514 | 480,884 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x518cfeed74aaa3e5ce025c8c0063e63d45ff8cb45ee3f76d1eef2f5114e44164) · [explorer](https://explore.qore.network/tx/C42A38E6812761D60427F254B680840534031467372193C7137181D8BF4792D6) |
+| 16 | After the deadline the unused 4 QOR goes back to the owner | 10,807,517 | 72,972 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x2289469639e8082fc37ad87ecc8a9a799ce0de001f5022a31cc910d3da7979b2) · [explorer](https://explore.qore.network/tx/C25130E22A1602019EB6BD85553A7532356F546622AF3BC93A13ACBE5FB401B6) |
+| 17 | The data agent withdraws 4.8 QOR with its ML-DSA-87 key | 10,807,522 | 309,851 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x50f240f23a0e0f796674070973c8c0694c93be6a7ce03184b88ea7aceeecd86e) · [explorer](https://explore.qore.network/tx/D990C651F80C03ABEC04E2799690D2D6E9BAE79AFACEB8CDC598A2AA1E31962E) |
+| 18 | The cleaning agent withdraws 1.2 QOR | 10,807,527 | 309,899 | [site](https://treatyv1.vercel.app/#tx/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/0x72a4a36bac90734d2c4e818fb6f38bbb6f501c76e3b8bdccf112fd3ef2007905) · [explorer](https://explore.qore.network/tx/2F28154052954AFBDB7A0A43774DAB39CF6675AF1976341CAB4CFC2CE46DFC59) |
 
 The attacks were also run against Diana, as simulated calls that spend nothing: with only the data agent's classical key, a withdrawal of its 3.2 QOR and a junk delivery were both refused with `BadPqcSignature`.
 
-> **Opening the links.** The QoreChain explorer lists Cosmos transaction hashes and opens on mainnet: choose **Testnet** at the top of the explorer first, then open a link. The Treaty website shows each transaction directly, read from Diana, with no setup.
+> **Opening the links.** The QoreChain explorer lists Cosmos transaction hashes and opens on mainnet: choose **Testnet** at the top of the explorer first, then open a link. The **site** links open Treaty's own transaction page instead: read straight from Diana, explained in plain words, with its Native receipt verified, and no setup.
 
 ## How it works
 

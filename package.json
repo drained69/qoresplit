@@ -35,5 +35,6 @@
     "solc": {
       "tmp": "0.2.7"
     }
-  }
+  },
+  "homepage": "https://treatyv1.vercel.app"
 }
