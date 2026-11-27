@@ -24,7 +24,7 @@ Nearly all of the code and documentation in this repository:
 | Web app | `src/app.js`, `src/chain.js`, `src/qorex.js`, `src/style.css`, `index.html`, `server/native.mjs` |
 | Demo | `examples/agents-demo.mjs`: research, data and cleaning agents and their owner |
 | Test infrastructure | `test/treaty.test.mjs`, `test/e2e.test.mjs`, `scripts/local-diana.mjs`: a local Diana stand-in whose `pqcVerify` only accepts signatures verified with real ML-DSA-87, and a stand-in QoreX wallet that signs with the official QoreSign library |
-| Docs | `README.md`, `AUDIT.md`, this file, `SUBMISSION.md` |
+| Docs | `README.md`, `AUDIT.md`, this file |
 
 ## How the AI's work was checked
 
