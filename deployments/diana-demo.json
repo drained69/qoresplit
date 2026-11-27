@@ -12,92 +12,110 @@
     {
       "step": "owner sets the agent’s limits",
       "tx": "0x778c28c2d0383b6cfbb0c00a7102ecab9f45078d4164efe54e8e4c6fa922cf58",
-      "block": "10807125"
+      "block": "10807125",
+      "cosmosTx": "04BC14E7184A099BBD48DD237C8B412620CB45DA6BD5101508BE481E12D2B56B"
     },
     {
       "step": "Data agent signs the terms",
       "tx": "0x94455203160fd0401422a8183ff0babfc8e39627092a02fd12ed7e7d14cf365c",
-      "block": "10807130"
+      "block": "10807130",
+      "cosmosTx": "C147F4CA118BE3CBD75AA2E5061AAB8051A2F54181F0A656C6D9F3C14186B58E"
     },
     {
       "step": "Cleaning agent signs the terms",
       "tx": "0x7ccddb392418ed3882fa9f33f3e021420332934fac849ce481faa6cc118317bd",
-      "block": "10807134"
+      "block": "10807134",
+      "cosmosTx": "FFC1D18552846ECAEBF6956536CC0879FD6B83632B55DB13AF42262FB9C8880F"
     },
     {
       "step": "Research agent signs the terms",
       "tx": "0xc144fdb9198b8086e3f2b53b0c09d15bbe30295803d7665ab3b32596a1586921",
-      "block": "10807141"
+      "block": "10807141",
+      "cosmosTx": "337B385B7AF9952EA1EC8F95EC5F8493174FB178F2E5EE3FC622BDBF32229D3D"
     },
     {
       "step": "the client locks the budget",
       "tx": "0x26b2fd06c5a1394133a00cee2dc5350a431d930217b1039cbd02466aad88426b",
-      "block": "10807144"
+      "block": "10807144",
+      "cosmosTx": "65EB5DCE1314F01F091950B2348245E731A295FA9CF1D6E5A71FAAA5B25BC108"
     },
     {
       "step": "a second treaty for the data agent",
       "tx": "0x3ff24cff10bdf52561aa5c29829932612cbfbc181f0697cb05bd48cc1d2eb262",
-      "block": "10807149"
+      "block": "10807149",
+      "cosmosTx": "481EF5567B14261AF3C4BCADFC01DF792EF5032A8BD768D5F57D934F29FBB1ED"
     },
     {
       "step": "the data agent delivers dataset 1",
       "tx": "0x4833e410dd7b28193c415d2fa849c2d28503269fd3f0e4f6f752a3d0d793bdc3",
-      "block": "10807160"
+      "block": "10807160",
+      "cosmosTx": "F7FB774EE3ED0DB62A80EF7885A587A041E6F26C17991CD7B6BE7692C2BB255D"
     },
     {
       "step": "the client accepts it",
       "tx": "0x83e254cb2323ab8e604b90da66e2c97692fad1d6cd62b0cf995b2580f4dbe5ce",
-      "block": "10807163"
+      "block": "10807163",
+      "cosmosTx": "B094B09897EB85995879AAF787CB09CBA8B74423756D1C04561F899532752B96"
     },
     {
       "step": "the data agent delivers dataset 2",
       "tx": "0xfe2e2cfbbebb3b17a9f60981134dd39b45a86aa31a19c3a8118492dbf9775bc8",
-      "block": "10807166"
+      "block": "10807166",
+      "cosmosTx": "54ECD73B0E18A46704112D3D8077668B935681807CB82FA0945E565A30794F28"
     },
     {
       "step": "the client rejects it",
       "tx": "0xf5fc792b78feaad39941bdbcd6e2512babef78101997bec4e451d696f643dc4f",
-      "block": "10807169"
+      "block": "10807169",
+      "cosmosTx": "D74D6D35B71207D625EECC2339845A7DB2E95C4ADF752559DBE334964C6F61CB"
     },
     {
       "step": "the data agent delivers a fixed dataset",
       "tx": "0xc10d5a5d0af294f7b5d98c1c24c265d9d7a96c410721f5be9ab4be26987451ce",
-      "block": "10807172"
+      "block": "10807172",
+      "cosmosTx": "F3F532CD8B151736048B2D1CD49925DEE030DD7E655795EB6802ED9BDCC18648"
     },
     {
       "step": "the cleaning agent releases the ignored delivery",
       "tx": "0x8822c27c80eec3705a2ce43157c407366eb8a49f90abc42a3fd4751674f8f189",
-      "block": "10807224"
+      "block": "10807224",
+      "cosmosTx": "3AE90C23AE7251C4291F432891FBCF0395AB31ABB8310BA5A263C9FBCF734E8A"
     },
     {
       "step": "the owner switches the agent off",
       "tx": "0xc6be277316e7014cf75065fa09377ef2f742a46d8ba38d49f6bfe229669a51b0",
-      "block": "10807234"
+      "block": "10807234",
+      "cosmosTx": "B6268411888C9D15E509868496F118C273C66C38A8AAF8BBDAB07B730FB3AB76"
     },
     {
       "step": "the data agent delivers another dataset",
       "tx": "0x94e9e9cc517206c0339eb08bcbe7a94a69e8f8142808ce09366e8fee86075d9f",
-      "block": "10807240"
+      "block": "10807240",
+      "cosmosTx": "C9DF9C2F535050BFB288A947857161A733197F261D73DF5ACBC40917BC3CB186"
     },
     {
       "step": "the cleaning agent releases the last delivery",
       "tx": "0x518cfeed74aaa3e5ce025c8c0063e63d45ff8cb45ee3f76d1eef2f5114e44164",
-      "block": "10807514"
+      "block": "10807514",
+      "cosmosTx": "C42A38E6812761D60427F254B680840534031467372193C7137181D8BF4792D6"
     },
     {
       "step": "the unused budget goes back",
       "tx": "0x2289469639e8082fc37ad87ecc8a9a799ce0de001f5022a31cc910d3da7979b2",
-      "block": "10807517"
+      "block": "10807517",
+      "cosmosTx": "C25130E22A1602019EB6BD85553A7532356F546622AF3BC93A13ACBE5FB401B6"
     },
     {
       "step": "Data agent withdraws",
       "tx": "0x50f240f23a0e0f796674070973c8c0694c93be6a7ce03184b88ea7aceeecd86e",
-      "block": "10807522"
+      "block": "10807522",
+      "cosmosTx": "D990C651F80C03ABEC04E2799690D2D6E9BAE79AFACEB8CDC598A2AA1E31962E"
     },
     {
       "step": "Cleaning agent withdraws",
       "tx": "0x72a4a36bac90734d2c4e818fb6f38bbb6f501c76e3b8bdccf112fd3ef2007905",
-      "block": "10807527"
+      "block": "10807527",
+      "cosmosTx": "2F28154052954AFBDB7A0A43774DAB39CF6675AF1976341CAB4CFC2CE46DFC59"
     }
   ],
   "treaty": "1",

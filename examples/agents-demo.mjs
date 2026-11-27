@@ -30,7 +30,6 @@ const step = (text) => console.log('\n' + text);
 const say = (text) => console.log('   ' + text);
 const short = (address) => address.slice(0, 6) + '…' + address.slice(-4);
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
-const explorer = (hash) => 'https://explore.qore.network/tx/' + hash;
 
 /** An AI agent: its own keys, its own Treaty connection, and a little judgement. */
 class Agent {
@@ -102,13 +101,20 @@ try {
   console.error('The demo could not start: ' + explain(error));
   process.exit(1);
 }
+/** On Diana, each transaction's Cosmos hash (the explorer's form) is looked up in the background. */
+const pending = [];
+let researcherLink = async () => undefined;
 const record = { network: live ? 'qorechain-diana' : 'local', contract: network.contract, startedAt: new Date().toISOString(), parties: {}, steps: [] };
 /** Keep each transaction for the record, and show its explorer link on Diana. */
 function track(label, result) {
   const receipt = result?.receipt ?? result;
   if (receipt?.transactionHash) {
-    record.steps.push({ step: label, tx: receipt.transactionHash, block: String(receipt.blockNumber) });
-    if (live) say('  ↳ ' + explorer(receipt.transactionHash));
+    const entry = { step: label, tx: receipt.transactionHash, block: String(receipt.blockNumber) };
+    record.steps.push(entry);
+    if (live) pending.push(researcherLink(receipt.transactionHash).then((cosmosTx) => {
+      if (cosmosTx) entry.cosmosTx = cosmosTx;
+    }));
+    if (live) say('  ↳ ' + receipt.transactionHash);
   }
   return result;
 }
@@ -126,6 +132,7 @@ try {
   const databot = await network.party('Data agent');
   const cleaner = await network.party('Cleaning agent');
   for (const agent of [olivia, researcher, databot, cleaner]) record.parties[agent.name] = agent.address;
+  researcherLink = (hash) => researcher.treaty.cosmosHash(hash);
 
   console.log('Treaty demo on ' + network.name + '. Every party has its own ML-DSA-87 key.');
   console.log('Treaty contract: ' + network.contract);
@@ -256,7 +263,9 @@ try {
   say('Treaty #' + id + ': ' + treaty.sales + ' datasets paid, 1 rejected, budget settled.');
   say(network.stats());
   if (live) {
+    await Promise.all(pending);
     record.finishedAt = new Date().toISOString();
+    record.explorer = 'https://explore.qore.network/tx/<cosmosTx> (choose Testnet at the top of the explorer first)';
     await mkdir(new URL('../deployments/', import.meta.url), { recursive: true });
     await writeFile(new URL('../deployments/diana-demo.json', import.meta.url), JSON.stringify(record, null, 2) + '\n');
     say('Saved every transaction to deployments/diana-demo.json. List these addresses on your project page:');

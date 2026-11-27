@@ -2,7 +2,8 @@
 import demo from '../deployments/diana-demo.json';
 import deployment from '../deployments/diana.json';
 
-const explorer = (hash) => 'https://explore.qore.network/tx/' + hash;
+/** Transaction links open Treaty's own page for it, read from Diana (the explorer needs its Testnet cookie). */
+const explorer = (hash) => '#tx/' + deployment.contract.address + '/' + hash;
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]);
@@ -102,12 +103,12 @@ export function homeHtml() {
       <div class="stat"><strong>0</strong><span>times anyone held the money but the contract</span></div>
     </div>
     <div class="facts">
-      <div><span>Contract</span><a href="${explorer(deployment.contract.deployTx)}" target="_blank" rel="noreferrer"><code>${escape(deployment.contract.address)}</code> ↗</a></div>
+      <div><span>Contract</span><a href="${explorer(deployment.contract.deployTx)}"><code>${escape(deployment.contract.address)}</code> ↗</a></div>
       <div><span>Deployed</span><strong>Block ${deployment.contract.block.toLocaleString('en-US')} · ${deployment.contract.gasUsed.toLocaleString('en-US')} gas · code verified against this build</strong></div>
-      <div><span>Treaty goes live</span><a href="${explorer(tx['Research agent signs the terms'].tx)}" target="_blank" rel="noreferrer">Last signature, terms recorded on Native (receipt #41) ↗</a></div>
-      <div><span>First payment</span><a href="${explorer(tx['the client accepts it'].tx)}" target="_blank" rel="noreferrer">Accepted delivery, 1.6 + 0.4 QOR, receipt #42 ↗</a></div>
-      <div><span>Owner's off switch</span><a href="${explorer(tx['the owner switches the agent off'].tx)}" target="_blank" rel="noreferrer">Research agent switched off ↗</a></div>
-      <div><span>Refund</span><a href="${explorer(tx['the unused budget goes back'].tx)}" target="_blank" rel="noreferrer">Unused 4 QOR returned to the owner ↗</a></div>
+      <div><span>Treaty goes live</span><a href="${explorer(tx['Research agent signs the terms'].tx)}">Last signature, terms recorded on Native (receipt #41) ↗</a></div>
+      <div><span>First payment</span><a href="${explorer(tx['the client accepts it'].tx)}">Accepted delivery, 1.6 + 0.4 QOR, receipt #42 ↗</a></div>
+      <div><span>Owner's off switch</span><a href="${explorer(tx['the owner switches the agent off'].tx)}">Research agent switched off ↗</a></div>
+      <div><span>Refund</span><a href="${explorer(tx['the unused budget goes back'].tx)}">Unused 4 QOR returned to the owner ↗</a></div>
     </div>
     <div class="cta" style="margin-top:24px"><a class="pill arrow" href="#live">Replay the deal, step by step</a></div>
   </section>
@@ -147,7 +148,7 @@ export function homeHtml() {
         <div><dt>Post-quantum checks</dt><dd><code>pqcKeyStatus</code> (0x…0a02) reads each signer's registered ML-DSA-87 key; <code>pqcVerify</code> (0x…0a01) verifies every signature, about 315k gas each.</dd></div>
         <div><dt>Message format</dt><dd>QoreSign message-signing-v1 with readable text, so QoreX shows people exactly what they sign and agents sign the same bytes.</dd></div>
         <div><dt>Cross-VM</dt><dd>Receipts through the bridge at 0x…0901 into the governance-approved Native receipt book (code 865).</dd></div>
-        <div><dt>Verification</dt><dd>16 contract tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 19 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
+        <div><dt>Verification</dt><dd>17 contract and service tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 17 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
       </dl>
     </div>
   </section>
@@ -248,7 +249,7 @@ export function liveHtml() {
     n += 1;
     const step = key ? tx[key] : undefined;
     const meta = step
-      ? `block ${escape(step.block)}<br><a href="${explorer(step.tx)}" target="_blank" rel="noreferrer">${shortHash(step.tx)} ↗</a>`
+      ? `block ${escape(step.block)}<br><a href="${explorer(step.tx)}">${shortHash(step.tx)} →</a>`
       : 'simulated · nothing spent';
     return `<article class="event ${kind ?? ''}"><span class="dot">${kind === 'refused' ? '✕' : n}</span>
       <div><h3>${escape(title)}</h3><p>${escape(text)}</p><span class="amount-tag">${escape(tag)}</span></div>
@@ -257,7 +258,7 @@ export function liveHtml() {
   return `<div class="shell page">
     <div class="intro"><p class="eyebrow">Live on QoreChain Diana · ${escape(liveFacts.date)}</p>
       <h1>One deal between AI agents, <em>replayed.</em></h1>
-      <p>Four separate accounts (an owner and three agents) ran this on the real Diana testnet. Each step below links to its transaction. Treaty #1 on contract <a href="${explorer(deployment.contract.deployTx)}" target="_blank" rel="noreferrer">${shortHash(deployment.contract.address)}</a>.</p></div>
+      <p>Four separate accounts (an owner and three agents) ran this on the real Diana testnet. Each step below links to its transaction. Treaty #1 on contract <a href="${explorer(deployment.contract.deployTx)}">${shortHash(deployment.contract.address)}</a>.</p></div>
     <div class="proof">
       <div class="stat"><strong>${demo.steps.length}/${demo.steps.length}</strong><span>transactions succeeded</span></div>
       <div class="stat"><strong>4</strong><span>Native receipts (#41 to #44)</span></div>

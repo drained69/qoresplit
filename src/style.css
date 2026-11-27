@@ -320,6 +320,10 @@ td .small { margin: 2px 4px 2px 0; }
 .deliver-form .field { width: 100%; margin-bottom: 0; }
 .deliver-form input[type=file] { padding: 9px; }
 .qorex-hint a { color: var(--green); }
+.tx-events { margin-top: 0; }
+.tx-events::before { display: none; }
+.warn-tag { background: var(--warn-bg) !important; color: var(--warn) !important; }
+.small-note { font-size: .82rem; }
 
 /* ---------------------------------------------------------------- footer */
 .site-footer { margin: 40px 12px 12px; border-radius: 28px; background: #10241a; color: #c9d6cd; }

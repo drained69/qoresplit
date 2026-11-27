@@ -333,6 +333,25 @@ export class Treaty {
     throw new Error('No ' + name + ' event in ' + receipt.transactionHash);
   }
 
+  /**
+   * The QoreChain explorer link for an EVM transaction. The explorer lists Cosmos hashes and opens
+   * on mainnet (choose Testnet at its top), so this looks the Cosmos hash up on Native REST.
+   */
+  async explorerLink(hash) {
+    const cosmosTx = await this.cosmosHash(hash);
+    return cosmosTx ? 'https://explore.qore.network/tx/' + cosmosTx : undefined;
+  }
+
+  async cosmosHash(hash) {
+    try {
+      const query = encodeURIComponent("ethereum_tx.ethereumTxHash='" + hash.toLowerCase() + "'");
+      const response = await fetch(this.rest + '/cosmos/tx/v1beta1/txs?query=' + query, { signal: AbortSignal.timeout(10_000) });
+      return response.ok ? (await response.json()).tx_responses?.[0]?.txhash : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Decode this contract's events from a receipt. */
   events(receipt) {
     return receipt.logs.filter((log) => log.address.toLowerCase() === this.contract.toLowerCase()).map((log) => {

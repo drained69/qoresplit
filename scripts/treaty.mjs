@@ -85,7 +85,9 @@ async function finish(treaty, label, run) {
   }
   const result = await run({});
   const receipt = result?.receipt ?? result;
-  console.log(label + ' · block ' + receipt.blockNumber + ' · https://explore.qore.network/tx/' + receipt.transactionHash);
+  console.log(label + ' · block ' + receipt.blockNumber + ' · ' + receipt.transactionHash);
+  const link = await treaty.explorerLink(receipt.transactionHash);
+  if (link) console.log('  explorer (choose Testnet at its top): ' + link);
   return result;
 }
 
