@@ -19,16 +19,16 @@
   "dependencies": {
     "@cosmjs/stargate": "0.39.0",
     "@qorechain/evm": "0.14.0",
-    "@qorechain/pqc": "^0.2.3",
-    "@qorechain/qoreseal": "^0.1.0",
-    "@qorechain/qorex-types": "^0.1.0",
+    "@qorechain/pqc": "0.2.3",
+    "@qorechain/qoreseal": "0.1.0",
+    "@qorechain/qorex-types": "0.1.0",
     "@qorechain/sdk": "0.14.0",
     "@scure/base": "1.2.6",
     "viem": "2.55.18"
   },
   "devDependencies": {
     "@qorechain/qoresign": "0.2.0",
-    "@qorechain/qorex-wallet-mock": "^0.1.0",
+    "@qorechain/qorex-wallet-mock": "0.1.0",
     "hardhat": "2.30.0",
     "solc": "0.8.39",
     "vite": "6.4.5"
