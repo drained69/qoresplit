@@ -2,6 +2,19 @@
 
 Treaty was called QoreSplit until version 2 and QorePact briefly during version 3.
 
+## Version 4: smart-account spending rules
+
+Scope: `sdk/smart-account.mjs` and `sdk/native.mjs` (sessions on QoreChain's abstractaccount module), the account commands, act two of the demo, the Native route `/api/native/smart-account/<qor1>`, and the statement card. The contract did not change and was not redeployed: it already accepts a budget locked by the client's owner.
+
+| Risk | Resolution |
+| --- | --- |
+| A stolen session key drains the owner's account. | The key is linked with the `evm` permission only (no `send`, staking, voting or deploy), and the rule's `allowed_evm_calls` lists only `Treaty.fund(uint256)` and `Treaty.refund(uint256)` on this contract. Every call is capped per call and per UTC day in QOR, measured by the chain on the call's real outflow, and the link expires. `fund` succeeds only for treaties the client agent signed with ML-DSA-87 within its mandate, and locked money leaves only per accepted delivery or back to the owner. |
+| A relayer alters or replays the agent's call. | The session key signs the v2 `MsgExecuteEVM` digest, which binds the chain, the account, the key, the target, the value, the call data, the key's own nonce and the gas limit. The chain refuses a mismatch, and a refused execution still consumes the nonce. Tests check that changing the gas, value or nonce breaks the signature. |
+| Someone links a key to an account they do not own, or a key is linked without consent. | Linking is an owner-signed hybrid transaction (secp256k1 + ML-DSA-87); the session key signs a possession proof bound to the chain and that exact account, which the SDK verifies before sending. |
+| A refused execution is read as a success. | From chain v3.2.8 a refused execution is a code-0 transaction with an `abstractaccount_execution_failed` event. The session reads the delivered transaction and reports `success: false` with the chain's reason. |
+| The rule is wider than intended. | `MsgUpdateSpendingRules` replaces the account's rules wholesale; the SDK builds one rule with both caps set (the chain refuses a value permission without a bounding rule) and validates it with the SDK's own checks before sending. |
+| An account that never linked a key breaks the statement page. | Diana answers 404 for it; the route and the SDK report it as "not a smart account" instead of an error. |
+
 ## Version 3: service treaties and agent owners
 
 Scope: service treaties (budget, deliveries, review, release, refund), agent mandates (owner limits, switching off, expiry), the SDK, the relayable request format, and the web app's new pages.

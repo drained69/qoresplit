@@ -453,3 +453,11 @@ td .small { margin: 2px 4px 2px 0; }
   .wallet-btn .net-badge { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ----------------------------------------------------------- smart account */
+.smart-card .rule { margin: 4px 0 6px; padding: 14px; border-radius: var(--radius); border: 1px solid var(--line-2); background: var(--bg-2); display: grid; gap: 12px; }
+.smart-card .rule.off { opacity: .55; }
+.smart-card .calls { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-call { font-family: var(--mono); font-size: .74rem; color: var(--cyan); background: #5be7ff12; border: 1px solid #5be7ff33; border-radius: 7px; padding: 4px 8px; }
+.smart-card h3 { margin-top: 4px; }
+.smart-card .history { width: 100%; }

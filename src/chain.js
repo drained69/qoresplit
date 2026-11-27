@@ -1,6 +1,6 @@
 import {
   BaseError, ContractFunctionRevertedError, createPublicClient, createWalletClient, custom, decodeAbiParameters,
-  decodeEventLog, defineChain, formatEther, getAddress, hexToBytes, hexToString, http, isAddress, parseEther, zeroAddress,
+  decodeEventLog, defineChain, formatEther, getAddress, hexToBytes, hexToString, http, isAddress, parseEther, toFunctionSelector, zeroAddress,
 } from 'viem';
 import { bech32 } from '@scure/base';
 import artifact from '../artifacts/Treaty.json';
@@ -465,4 +465,24 @@ export async function describeTransaction(hash) {
     receipt, transaction, events, time: new Date(Number(block.timestamp) * 1000),
     fee: receipt.gasUsed * receipt.effectiveGasPrice, isTreaty: receipt.to?.toLowerCase() === address.toLowerCase() || events.length > 0,
   };
+}
+
+const selectorNames = Object.fromEntries(abi.filter((item) => item.type === 'function').map((item) => [toFunctionSelector(item), item.name]));
+
+/**
+ * The spending rules and linked keys QoreChain itself enforces for `account` (its abstractaccount
+ * module, read through the Native route). Allowed calls are named when they target this Treaty.
+ */
+export async function getSmartAccount(account) {
+  const qorAddress = qorAddressOf(account);
+  const response = await fetch('/api/native/smart-account/' + qorAddress, { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error('Could not read the smart account from Diana.');
+  const body = await response.json();
+  const describe = (entry) => {
+    const [target, selector] = entry.split('/');
+    const treaty = address && target?.toLowerCase() === address.toLowerCase();
+    const name = treaty ? 'Treaty' : short(target ?? '');
+    return selector ? name + '.' + (treaty ? selectorNames[selector] ?? selector : selector) : 'any call to ' + name;
+  };
+  return { ...body, qorAddress, rules: body.rules.map((rule) => ({ ...rule, calls: rule.allowedEvmCalls.map(describe) })) };
 }

@@ -3,7 +3,7 @@ import { formatEther, getAddress, isAddress } from 'viem';
 import {
   address, chainTime, checkWindow, cosmosHashOf, describeTransaction, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
   getRefundable, getStatement, getUnitPayments, getWithdrawals, parsePrice, parseRequest, parseShare, pqcKeyStatus,
-  requestWallet, switchToDiana, listWallets, walletChainId, authorizedAccount, balanceOf, DIANA_CHAIN_ID, qorAddressOf, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
+  requestWallet, switchToDiana, listWallets, getSmartAccount, walletChainId, authorizedAccount, balanceOf, DIANA_CHAIN_ID, qorAddressOf, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
 } from './chain.js';
 import { MAX_PARTIES, deliverableHash } from './protocol.js';
 import { qorexAvailable, signWithQorex } from './qorex.js';
@@ -884,6 +884,45 @@ function mandateCard(who, mandate, off) {
     ${command(off ? 'npm run pq -- withdraw all --for ' + who : 'npm run pq -- revoke ' + who)}</section>`;
 }
 
+const uqorText = (value) => formatQor(BigInt(value) * 10n ** 12n);
+
+/** QoreChain's own spending rules for this account, or for the owner whose account an agent spends from. */
+function smartAccountCard(state, { whose, ownerOf }) {
+  const now = Date.now() / 1000;
+  const keys = state.authenticators.map((key) => {
+    const expired = Number(key.expiryUnix) < now;
+    const status = key.revoked ? ['Revoked', 'muted'] : expired ? ['Expired', 'muted'] : ['Active', 'ok'];
+    return `<li><span>${escape(key.label || 'Linked key')}<small>${escape(key.scheme)} key ${escape(key.pubkeyHex.slice(0, 10))}… · may: ${escape(key.permissions.join(', '))} · until ${new Date(Number(key.expiryUnix) * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small></span>
+      <span class="tag ${status[1]}">${status[0]}</span></li>`;
+  }).join('');
+  const rules = state.rules.map((rule) => `<div class="rule${rule.enabled ? '' : ' off'}">
+      <dl class="totals"><dt>Per call</dt><dd>${Number(rule.perTxLimit) ? uqorText(rule.perTxLimit) : 'no limit'}</dd>
+      <dt>Per day</dt><dd>${Number(rule.dailyLimit) ? uqorText(rule.dailyLimit) : 'no limit'}</dd>
+      <dt>Coins</dt><dd>${rule.allowedDenoms.length ? escape(rule.allowedDenoms.join(', ').replace('uqor', 'QOR')) : 'any'}</dd></dl>
+      <div class="calls">${rule.calls.length ? rule.calls.map((call) => `<span class="chip-call">${escape(call)}</span>`).join('') : '<span class="chip-call">value transfers only</span>'}</div></div>`).join('');
+  return `<section class="card action smart-card"><div class="tag ok">Enforced by QoreChain</div>
+    <h2>Chain-enforced spending rules</h2>
+    <p>${ownerOf ? `This agent spends its owner’s money only through a key linked to the owner’s account, <span title="${escape(state.qorAddress)}">${escape(state.qorAddress.slice(0, 12))}…</span>. ` : ''}QoreChain’s smart-account module checks every call a linked key makes against these rules before it runs, then Treaty checks its own. Linking, changing and revoking need ${whose} hybrid ML-DSA-87 signature.</p>
+    ${rules || '<p class="muted">No spending rule.</p>'}
+    <h3>Linked keys</h3><ul class="history">${keys || '<li><span class="muted">None</span></li>'}</ul>
+    ${command('npm run accounts -- session-status')}</section>`;
+}
+
+async function renderSmartAccount(who, mandate, revision) {
+  const slot = document.querySelector('#smart-account');
+  const owner = mandate?.owner;
+  const [own, owners] = await Promise.all([
+    getSmartAccount(who).catch(() => undefined),
+    owner ? getSmartAccount(owner).catch(() => undefined) : undefined,
+  ]);
+  if (revision !== rendering || !slot) return;
+  slot.innerHTML = [
+    own?.smartAccount ? smartAccountCard(own, { whose: 'this account’s' }) : '',
+    owners?.smartAccount ? smartAccountCard(owners, { whose: 'the owner’s', ownerOf: true }) : '',
+  ].join('');
+  bindCopy();
+}
+
 async function statementPage(who, revision) {
   if (!validAddress(who)) throw new Error('Invalid address.');
   const statement = await getStatement(who);
@@ -903,6 +942,7 @@ async function statementPage(who, revision) {
       <p>Add <code>--to 0x…</code> to send elsewhere, or <code>--out withdrawal.json</code> to submit from any wallet below.</p>
       <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('statement', who)))}">Copy statement link</button></section>
       ${statement.mandate ? mandateCard(who, statement.mandate, switchedOff) : ''}
+      <div id="smart-account"></div>
       ${relayForm('Paste a withdrawal, or an owner’s limits or off switch, signed with the signing tool or an agent.')}</div>
     <div class="stack"><section class="card ledger"><h2>Earning from</h2>${rows
       ? '<div class="table"><table><thead><tr><th>Treaty</th><th>Share</th><th>Paid</th><th>Earned</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -929,6 +969,7 @@ async function statementPage(who, revision) {
       args: (signature) => [who, signature], done: () => show(contractRoute('statement', who), 'The agent is switched off.'),
     });
   }
+  void renderSmartAccount(who, statement.mandate, revision);
   void getWithdrawals(who).then((withdrawals) => {
     if (revision !== rendering) return;
     document.querySelector('#withdrawals').innerHTML = withdrawals.length

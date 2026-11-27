@@ -15,7 +15,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
-  DeliveryStatus, Kind, RELAYABLE, Status, budgetOf, deliverableHash, deliveryMessage, isService, mandateMessage, revokeMessage,
+  DeliveryStatus, Kind, RELAYABLE, Status, budgetOf, deliverableHash, deliveryMessage, isService, mandateMessage, parseSignedRequest, revokeMessage,
   reviewMessage, signedRequest, splitAmounts, termsHash, termsMessage, windowProblem, withdrawalMessage,
 } from '../src/protocol.js';
 import { loadSigner, registeredKey } from './pqc.mjs';
@@ -249,6 +249,17 @@ export class Treaty {
     const message = revokeMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, agent, nonce });
     await this.#same(message, 'revokeMessage', [agent]);
     return this.#relayOrSend('revokeMandate', { agent, ownerSignature: me.sign(message) }, options);
+  }
+
+  /**
+   * Send a signed request someone else made (with { relay: true }), from this account. It authorises
+   * nothing by itself: the contract checks the ML-DSA-87 signature inside against the signer's key.
+   */
+  async relay(request) {
+    const { action, args } = parseSignedRequest(typeof request === 'string' ? request : JSON.stringify(request), {
+      chainId: this.chain.id, contract: this.contract,
+    });
+    return this.#send(action, args);
   }
 
   /** Whether this account's ML-DSA-87 key matches the one registered on chain. */
