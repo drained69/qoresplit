@@ -145,9 +145,10 @@ export function homeHtml() {
       <dl class="spec">
         <div><dt>Contract</dt><dd>Solidity 0.8, ${Math.round(21179 / 1024)} KB, no owner or upgrade path. <a href="https://github.com/drained69/qoresplit/blob/main/contracts/Treaty.sol" target="_blank" rel="noreferrer">Treaty.sol ↗</a></dd></div>
         <div><dt>Post-quantum checks</dt><dd><code>pqcKeyStatus</code> (0x…0a02) reads each signer's registered ML-DSA-87 key; <code>pqcVerify</code> (0x…0a01) verifies every signature, about 315k gas each.</dd></div>
-        <div><dt>Message format</dt><dd>QoreSign message-signing-v1 with readable text, so QoreX shows people exactly what they sign and agents sign the same bytes.</dd></div>
+        <div><dt>Message format</dt><dd>QoreSign message-signing-v1 with readable text, so a wallet shows people exactly what they sign, and agents sign the same bytes.</dd></div>
+        <div><dt>Private deliveries</dt><dd>QoreSeal (ML-KEM-1024 + X25519) encrypts the work to the client; only its hash goes on chain, and the client checks the data against it.</dd></div>
         <div><dt>Cross-VM</dt><dd>Receipts through the bridge at 0x…0901 into the governance-approved Native receipt book (code 865).</dd></div>
-        <div><dt>Verification</dt><dd>16 contract tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 19 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
+        <div><dt>Verification</dt><dd>25 unit tests (the contract, QoreSeal, and QoreX signing against the official QoreX mock), 6 end-to-end tests (real ML-DSA-87 keys, a real browser) and 19 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
       </dl>
     </div>
   </section>
@@ -170,7 +171,7 @@ export function homeHtml() {
       ${faq('Who holds the money?', 'Nobody. The Treaty contract holds it, and its rules are public: pay per accepted job, release ignored jobs after the review period, return the rest after the deadline. There is no admin, no pause button and no upgrade.')}
       ${faq('What if the client agent never answers?', 'Each delivery has a review period. If the client neither accepts nor rejects in time, anyone can release the payment, so workers are never stuck waiting.')}
       ${faq('Can an owner stop a misbehaving agent?', 'Yes. The owner switches the agent off with one signature. From then on the agent cannot sign anything in Treaty, only the owner can withdraw its earnings, and unused budgets go back to the owner.')}
-      ${faq('Do people need to run code?', 'No. People sign in this web app with the QoreX wallet and see exactly what they approve, in plain words. Agents use the Treaty SDK. Both produce the same signatures.')}
+      ${faq('Do people need to run code?', 'Not much. People sign each action with one command of the Treaty signing tool, which shows the exact words they approve, and then submit it from this web app with any wallet. The app is ready for the QoreX wallet to sign in the browser and turns that on as soon as QoreX supports message signing. Agents use the Treaty SDK. All produce the same signatures.')}
       ${faq('Is this live, or a mock-up?', 'Live. The contract is deployed on QoreChain\'s Diana testnet and the whole agents story ran there on 26 November 2026: 18 transactions, all linked on the live deal page. Test QOR has no monetary value; nothing on mainnet is involved.')}
       ${faq('What does it cost to use?', 'Only network fees. A signature check costs about 315,000 gas on Diana. Treaty takes no fee, and the contract has no owner who could add one.')}
       ${faq('Is it only for agents?', 'No. Treaty also does revenue shares: several people (or agents) sell something together and every payment is split automatically between them.')}

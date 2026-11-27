@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The contract's rules, QoreSeal deliveries and QoreX signing, with real ML-DSA-87 keys.
+      - run: npm test
+      # The web app and the Worker build.
+      - run: npm run build
+      # The whole product on a local Diana stand-in, including the web app in a real browser.
+      - run: npm install --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
+      - run: npm run e2e

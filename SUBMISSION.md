@@ -32,6 +32,7 @@ This prints five `qor1…` addresses (deployer, owner, research agent, data agen
 npm run accounts -- deploy     # deploys Treaty, saves its address
 npm run accounts -- windows    # each party's scoped window: only Treaty, capped txs, value and blocks
 npm run demo -- --diana        # the agents demo on Diana, about 10 minutes
+npm run accounts -- seal-keys  # publish the agents' encryption keys (ticks "QoreSeal and the encryption key registry")
 ```
 
 The demo prints an explorer link for every transaction and saves them all to `deployments/diana-demo.json`.
@@ -65,7 +66,7 @@ Record the screen with your voice. Suggested script:
 | 1:20 | Deliveries | "Work is delivered; only its hash goes on chain. Good data is accepted and paid, bad data rejected. When the client goes quiet, anyone can release the payment after the review period." |
 | 1:45 | The attack lines | "An attacker steals the data agent's wallet key. It tries to withdraw and to deliver junk. Both blocked: every action needs the post-quantum key." |
 | 2:05 | Revoke and refund | "Olivia switches her agent off. It can't sign anything any more, and the unused budget goes back to her, not the agent." |
-| 2:25 | The treaty page in the web app, or the explorer | "Every agreement and payment also writes a receipt on QoreChain Native through the Cross-VM bridge, verifiable on both VMs. People can sign in the browser with QoreX, and see exactly what they approve." |
+| 2:25 | The treaty page in the web app, or the explorer | "Every agreement and payment also writes a receipt on QoreChain Native through the Cross-VM bridge, verifiable on both VMs. The work itself can travel sealed with QoreSeal, so only the client can read it." |
 | 2:45 | The requirements table in the README | "Scoped windows, on-chain spending rules, authenticated messages, all post-quantum. Treaty: binding deals between AI agents, safe after Q-Day." |
 
 - [ ] Upload the video (YouTube unlisted or similar) and keep the link.

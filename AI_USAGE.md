@@ -19,7 +19,7 @@ Nearly all of the code and documentation in this repository:
 | Area | Files |
 | --- | --- |
 | Smart contract | `contracts/Treaty.sol`: consent with ML-DSA-87, revenue shares and amendments, service treaties (budget, deliveries, review, release, refund), owner mandates, QoreSign-format messages, Cross-VM receipts |
-| Protocol and SDK | `src/protocol.js`, `sdk/treaty.mjs`, `sdk/pqc.mjs`: byte-exact message builders, the agent SDK, ML-DSA-87 signing |
+| Protocol and SDK | `src/protocol.js`, `sdk/treaty.mjs`, `sdk/pqc.mjs`, `sdk/seal.mjs` (QoreSeal deliveries): byte-exact message builders, the agent SDK, ML-DSA-87 signing |
 | Tools | `scripts/treaty.mjs` (signing tool), `scripts/accounts.mjs` (Diana accounts and scoped windows), `scripts/deploy.mjs`, `scripts/check-diana.mjs` |
 | Web app | `src/app.js`, `src/chain.js`, `src/qorex.js`, `src/style.css`, `index.html`, `server/native.mjs` |
 | Demo | `examples/agents-demo.mjs`: research, data and cleaning agents and their owner |
@@ -35,6 +35,15 @@ The agent was not trusted on its word. Every claim in the README is backed by so
 - **Live checks on Diana** (`npm run check:diana`): read-only calls to the real testnet. These caught real issues the local tests could not: Diana's RPC caps gas estimates at 5M, state overrides switch off QoreChain's precompiles, and a contract-creation call needs a sender whose window allows creation. The tooling was changed to match.
 - **An audit round** in which the agent re-read the contract and found a real bug: anyone could lock a client's budget, but refunds went to the client, so a third party could lose money. It was fixed with tests before submission (see `AUDIT.md`).
 - **Visual checks**: screenshots of every page at desktop and phone width, which caught layout bugs (long addresses overflowing on phones).
+
+## A late round: QoreChain kits, checked before they were used
+
+Near the deadline the developer asked which QoreChain kits Treaty could use for real. The agent read each official package's documentation and code, then sorted them:
+
+- **Adopted, because they do a job in Treaty:** QoreSeal (deliveries sealed to the client with ML-KEM-1024), `@qorechain/qorex-types` (finding QoreX in the browser), `@qorechain/qorex-wallet-mock` (testing against QoreX's official test double) and `@qorechain/pqc` (seal keys, and an independent ML-DSA-87 check of the SDK's and QoreX's signatures).
+- **Rejected, with the reason recorded:** Handles (QoreChain's docs say the registry address and key are not published), QoreScan (it inventories a node's data directory, which Treaty does not have), and kits for rollups, assets, custody and Cosmos wallets that Treaty has no use for.
+
+The same round corrected a claim. Testing against the official QoreX mock showed that today's QoreX refuses message signing, so the agent changed the web app to offer QoreX signing only to a build that announces it, and reworded the README and the site, which had said people sign in the browser with QoreX today. A final audit, done the way a judge would read the project, also refreshed the featured image, added continuous integration and updated stale test counts on the site.
 
 ## What the human contributed
 

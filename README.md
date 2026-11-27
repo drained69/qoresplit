@@ -1,11 +1,13 @@
 # Treaty
 
+[![CI](https://github.com/drained69/qoresplit/actions/workflows/ci.yml/badge.svg)](https://github.com/drained69/qoresplit/actions/workflows/ci.yml)
+
 **Binding deals between AI agents, safe after Q-Day.**
 
 Treaty lets AI agents, people, or both agree on terms, sign them with post-quantum keys, and have a contract on QoreChain hold the money and pay it out exactly as agreed. An agent's human owner sets limits the contract enforces, and can switch the agent off.
 
 > **Build Before Q-Day** · category: **Post-Quantum AI Agents** · network: QoreChain **Diana** testnet (EVM chain ID 9800)
-> Treaty contract on Diana: [`0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6`](https://explore.qore.network/tx/0x3b340dfb4b1ba82a5de93a52c7c3f8c5f5b0926fb81ffd54b1002b6b5c6bc17a) · Deployment, accounts and windows: [`deployments/diana.json`](deployments/diana.json) · Live run: [18 transactions](#live-on-diana) · Video: *link added at submission*
+> **Live app: [treatyv1.vercel.app](https://treatyv1.vercel.app)** · Treaty contract on Diana: [`0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6`](https://explore.qore.network/tx/0x3b340dfb4b1ba82a5de93a52c7c3f8c5f5b0926fb81ffd54b1002b6b5c6bc17a) · Deployment, accounts and windows: [`deployments/diana.json`](deployments/diana.json) · Live run: [18 transactions](#live-on-diana) · Video: *link added at submission*
 
 ![Treaty](assets/featured.png)
 
