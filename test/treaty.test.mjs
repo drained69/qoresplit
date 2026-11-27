@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import solc from 'solc';
 import {
   BaseError, ContractFunctionRevertedError, concatHex, createPublicClient, createWalletClient, custom,
-  decodeAbiParameters, decodeEventLog, getAddress, hexToString, keccak256, parseEther, stringToHex, toHex,
+  decodeAbiParameters, decodeEventLog, getAddress, hexToBytes, hexToString, keccak256, parseEther, stringToHex, toHex,
 } from 'viem';
 import { foundry } from 'viem/chains';
 import {
@@ -14,6 +14,7 @@ import {
 } from '../src/protocol.js';
 import { forgerFor, verifyLocally } from '../sdk/pqc.mjs';
 import { generatePqcKeypair, pqcSign } from '@qorechain/sdk';
+import { mldsa87 } from '@qorechain/pqc';
 
 process.env.HARDHAT_CONFIG = new URL('./hardhat.config.cjs', import.meta.url).pathname;
 const { default: hre } = await import('hardhat');
@@ -451,6 +452,9 @@ test('real ML-DSA-87 signatures over the contract bytes verify, and only for the
   const signature = toHex(pqcSign(keypair.secretKey, Buffer.from(message.slice(2), 'hex')));
   assert.equal((signature.length - 2) / 2, 4627);
   assert.ok(verifyLocally(keypair.publicKey, message, signature));
+  // The same signature verifies with @qorechain/pqc, the library checked against QoreChain's
+  // shared cross-language test vectors: what the SDK signs is plain FIPS 204 ML-DSA-87.
+  assert.ok(mldsa87.verify(keypair.publicKey, hexToBytes(message), hexToBytes(signature)));
   const otherTerms = termsMessage({ chainId: CHAIN_ID, contract, id, signer: alice, hash: termsHash({ ...workshop({ shares: [3000, 3000, 4000] }), previous: 0n }) });
   assert.notEqual(otherTerms, message);
   assert.equal(agreement.termsHash, termsHash({ ...workshop(), previous: 0n }));

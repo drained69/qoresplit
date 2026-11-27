@@ -20,7 +20,12 @@ Agree
 
 Service treaties
   fund <id>                           lock the treaty's budget (sends QOR)
-  deliver <id> (--file f | --text t)  deliver one unit; only its hash goes on chain
+  deliver <id> (--file f | --text t) [--seal KEY|chain]
+                                      deliver one unit; only its hash goes on chain. --seal also encrypts
+                                      the work to the client with QoreSeal (ML-KEM-1024): give its seal key
+                                      (text or a file), or "chain" for its key in the KEM registry
+  seal-key                            your seal key: share it so providers can deliver privately to you
+  open <id> <unit> --file envelope [--save f]   as the client, decrypt a sealed delivery and check its hash
   accept <id> <unit>                  as the client, accept a delivery (pays one unit)
   reject <id> <unit>                  as the client, reject a delivery within the review period
   release <id> <unit>                 pay a delivery the client ignored past its review period
@@ -78,10 +83,11 @@ const amountFlag = (name) => {
 /** Send, or save a signed request with --out. */
 async function finish(treaty, label, run) {
   if (flags.out) {
-    const request = await run({ relay: true });
+    const result = await run({ relay: true });
+    const request = result?.envelope ? result.request : result;
     await writeFile(flags.out, request + '\n', { mode: 0o600 });
     console.log('Saved the signed request to ' + flags.out + '. Paste it into "Submit a signature" in the app; any wallet can send it.');
-    return;
+    return result?.envelope ? { envelope: result.envelope } : undefined;
   }
   const result = await run({});
   const receipt = result?.receipt ?? result;
@@ -185,10 +191,40 @@ const commands = {
     if (flags.file) content = new Uint8Array(await readFile(flags.file));
     else if (flags.text !== undefined) content = flags.text;
     else throw new Error('Give the work with --file <path> or --text "…". Only its hash goes on chain.');
+    let sealTo;
+    if (flags.seal) {
+      sealTo = flags.seal === 'chain' || flags.seal.startsWith('treaty-seal-key:') ? flags.seal : (await readFile(flags.seal, 'utf8')).trim();
+    }
     console.log('Deliver to treaty #' + agreement.id + ' (' + JSON.stringify(agreement.title) + '): ' + deliverableHash(content));
+    if (sealTo) console.log('The work is sealed to the client ' + agreement.client + ' with QoreSeal; only its hash goes on chain.');
     await confirm('Sign this delivery with your ML-DSA-87 key?');
-    const result = await finish(treaty, 'Delivered', (options) => treaty.deliver(agreement.id, content, options));
+    const unit = agreement.deliveries;
+    const result = await finish(treaty, 'Delivered', (options) => treaty.deliver(agreement.id, content, { ...options, sealTo }));
+    if (result?.envelope) {
+      const file = flags.envelope ?? 'delivery-' + agreement.id + '-' + unit + '.qoreseal';
+      await writeFile(file, result.envelope + '\n');
+      console.log('Sealed envelope saved to ' + file + '. Send it to the client; only they can open it: npm run pq -- open ' + agreement.id + ' ' + unit + ' --file ' + file);
+    }
     if (result?.unit !== undefined) console.log('This is delivery ' + result.unit + '. The client has ' + agreement.reviewPeriod + ' s to review it.');
+  },
+
+  async ['seal-key']() {
+    const treaty = await connect();
+    console.log(treaty.sealKey());
+    console.error('Share this line with your providers (it is public). Save it to a file and they can pass it as --seal <file>.');
+  },
+
+  async open(value, unit) {
+    const treaty = await connect();
+    if (!flags.file) throw new Error('Give the sealed envelope with --file <path>.');
+    const work = await treaty.openDelivery(id(value), unitOf(unit), (await readFile(flags.file, 'utf8')).trim());
+    console.error('Opened and checked: it matches the hash delivered on chain for delivery ' + unit + ' of treaty #' + value + '.');
+    if (flags.save) {
+      await writeFile(flags.save, work, { mode: 0o600 });
+      console.error('Saved to ' + flags.save + ' (' + work.length + ' bytes).');
+    } else {
+      process.stdout.write(new TextDecoder().decode(work) + '\n');
+    }
   },
 
   async accept(value, unit) { await review(value, unit, true); },

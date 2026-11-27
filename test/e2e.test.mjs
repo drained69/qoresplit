@@ -252,7 +252,18 @@ test('agents: limits from an owner, a service treaty, delivery, review, release,
   assert.equal((await read('getMandate', [agent.address])).committed, parseEther('10'));
 
   // Delivery, acceptance, rejection relayed by someone else, and release.
-  assert.match(await pqOk(provider, 'deliver', String(id), '--text', 'dataset 1', '--yes'), /This is delivery 0/);
+  // The first delivery is private: sealed to the client with QoreSeal, only its hash on chain.
+  const sealKey = join(work, 'client.sealkey');
+  await (await import('node:fs/promises')).writeFile(sealKey, await pqOk(agent, 'seal-key'));
+  const envelope = join(work, 'delivery-0.qoreseal');
+  const sealed = await pqOk(provider, 'deliver', String(id), '--text', 'dataset 1', '--seal', sealKey, '--envelope', envelope, '--yes');
+  assert.match(sealed, /Sealed envelope saved/);
+  assert.match(sealed, /This is delivery 0/);
+  assert.match(await readFile(envelope, 'utf8'), /^qoreseal:/);
+  assert.equal((await readFile(envelope, 'utf8')).includes('dataset 1'), false, 'the envelope does not contain the work');
+  assert.match((await pq(helper, 'open', String(id), '0', '--file', envelope)).output, /does not open with your seal keys/);
+  assert.match((await pq(agent, 'open', String(id), '1', '--file', envelope)).output, /has no delivery 1|does not open/);
+  assert.equal((await pqOk(agent, 'open', String(id), '0', '--file', envelope)).trim(), 'dataset 1');
   assert.match((await pq(helper, 'accept', String(id), '0', '--yes')).output, /Only the client/);
   await pqOk(agent, 'accept', String(id), '0', '--yes');
   assert.equal(await read('claimable', [provider.address]), earnedBefore[0] + parseEther('1.6'));
@@ -352,8 +363,12 @@ test('web app in a browser: revenue share and service treaty, relay, pay, verify
     });
   });
   await page.addInitScript(() => {
+    // Announces message signing, which today's QoreX does not yet; test/qorex.test.mjs checks
+    // the same flow against the official QoreX mock.
     window.qorex = { native: {
+      isQoreX: true,
       capabilities: ['signArbitrary'],
+      async signDirect() { throw new Error('not used by Treaty'); },
       async enable() {},
       async getKey() { return { bech32Address: await window.__qorexAddress() }; },
       signArbitrary: (chainId, signer, data) => window.__qorexSign(chainId, signer, data),

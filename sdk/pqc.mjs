@@ -3,6 +3,7 @@
 // (QoreX refuses signArbitrary), so the signatures are made here, on your computer.
 import { deriveUnifiedAccount, generatePqcKeypair, pqcSign, pqcVerify, unifiedAccountFromSeed } from '@qorechain/sdk';
 import { bytesToHex, getAddress, hexToBytes } from 'viem';
+import { sealKeysFor } from './seal.mjs';
 
 export const PQC_KEYS = '0x0000000000000000000000000000000000000a02';
 export const pqcKeysAbi = [{
@@ -22,8 +23,9 @@ export const pqcKeysAbi = [{
 export async function loadSigner(env = process.env) {
   const mnemonic = env.QORE_MNEMONIC?.trim();
   let account;
+  let index = 0;
   if (mnemonic) {
-    const index = Number(env.QORE_ACCOUNT_INDEX ?? 0);
+    index = Number(env.QORE_ACCOUNT_INDEX ?? 0);
     if (!Number.isSafeInteger(index) || index < 0) throw new Error('QORE_ACCOUNT_INDEX must be a whole number.');
     account = await deriveUnifiedAccount(mnemonic, index);
   } else {
@@ -42,6 +44,8 @@ export async function loadSigner(env = process.env) {
     sign: (messageHex) => bytesToHex(pqcSign(account.pqc.secretKey, hexToBytes(messageHex))),
     /** The full hybrid account, for Native-lane transactions (for example relaying a smart-account call). */
     unified: account,
+    /** QoreSeal (ML-KEM-1024 + X25519) keys for private deliveries; see seal.mjs. */
+    sealKeys: () => sealKeysFor(mnemonic ? { mnemonic, accountIndex: index } : { privateKey: account.privateKey }),
   };
 }
 
