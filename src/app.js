@@ -1,9 +1,9 @@
 import './style.css';
-import { formatEther } from 'viem';
+import { formatEther, getAddress, isAddress } from 'viem';
 import {
-  address, chainTime, checkWindow, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
+  address, chainTime, checkWindow, cosmosHashOf, describeTransaction, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
   getRefundable, getStatement, getUnitPayments, getWithdrawals, parsePrice, parseRequest, parseShare, pqcKeyStatus,
-  requestWallet, selectWallet, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
+  requestWallet, switchToDiana, listWallets, getSmartAccount, walletChainId, authorizedAccount, balanceOf, DIANA_CHAIN_ID, qorAddressOf, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
 } from './chain.js';
 import { MAX_PARTIES, deliverableHash } from './protocol.js';
 import { qorexAccount, qorexAvailable, qorexDownload, qorexStatus, signWithQorex } from './qorex.js';
@@ -11,7 +11,6 @@ import { homeHtml, liveFacts, liveHtml, liveParties, liveStateHtml } from './sto
 
 const content = document.querySelector('#content');
 const status = document.querySelector('#status');
-const walletButton = document.querySelector('#wallet');
 let provider;
 let account;
 let rendering = 0;
@@ -35,7 +34,8 @@ const errorMessage = (error) => {
   const code = error?.walk?.((cause) => cause.code === 4001)?.code ?? error?.code;
   return code === 4001 ? 'Request cancelled in your wallet.' : explainError(error);
 };
-const explorerTx = (hash) => 'https://explore.qore.network/tx/' + hash;
+/** Every transaction link opens Treaty's own transaction page, read straight from Diana. */
+const explorerTx = (hash) => '#' + contractRoute('tx', hash);
 const linkURL = (fragment) => new URL('#' + fragment, location.href).href;
 const contractRoute = (route, value) => route + '/' + address + '/' + value;
 const validHash = (hash) => /^0x[\da-f]{64}$/i.test(hash ?? '');
@@ -58,29 +58,209 @@ const stateLabel = {
 };
 const deliveryLabel = { Pending: 'Waiting for review', Accepted: 'Accepted · paid', Rejected: 'Rejected', Released: 'Released · paid' };
 
-function refreshWalletLabel() {
-  walletButton.textContent = account ? short(account) : 'Connect wallet';
-  walletButton.title = account ?? 'Connect MetaMask or a compatible EVM wallet';
+// ----------------------------------------------------------------- wallet
+// A standard connect flow: a wallet picker (EIP-6963), an account menu, the network, and a session
+// that is remembered. The EVM wallet sends transactions; QoreX adds the post-quantum signatures.
+const WALLET_KEY = 'treaty.wallet';
+const walletWrap = document.querySelector('#wallet-wrap');
+let walletId;
+let chainOk = true;
+let menuOpen = false;
+let balance;
+const shortBalance = (wei) => Number(formatEther(wei)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' QOR';
+const remember = (id) => { try { id ? localStorage.setItem(WALLET_KEY, id) : localStorage.removeItem(WALLET_KEY); } catch {} };
+const remembered = () => { try { return localStorage.getItem(WALLET_KEY) ?? undefined; } catch { return undefined; } };
+
+/** A small deterministic avatar for an address, in the site's colours. */
+function avatar(value, size = '') {
+  const bytes = value.slice(2).match(/../g).map((byte) => parseInt(byte, 16));
+  const hue = (i) => (bytes[i] * 360) / 256;
+  const cells = Array.from({ length: 16 }, (_, i) => bytes[4 + i] > 120
+    ? `<rect x="${(i % 4) * 8}" y="${Math.floor(i / 4) * 8}" width="8" height="8" fill="#ffffff" opacity="${(0.08 + (bytes[4 + i] % 5) / 20).toFixed(2)}"/>` : '').join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue(0)},90%,62%)"/><stop offset="1" stop-color="hsl(${hue(1)},80%,58%)"/></linearGradient></defs><rect width="32" height="32" fill="url(#a)"/>${cells}</svg>`;
+  return `<img class="avatar ${size}" alt="" src="data:image/svg+xml,${encodeURIComponent(svg)}">`;
 }
 
-function attachWalletEvents(selected) {
-  selected.on?.('accountsChanged', (accounts) => {
-    account = accounts[0];
-    refreshWalletLabel();
-    if (location.hash === '#earnings' && !busy) void render();
+function renderWallet() {
+  if (!account) {
+    walletWrap.innerHTML = '<button id="wallet" type="button" class="wallet-btn connect" aria-haspopup="dialog">Connect wallet</button>';
+  } else if (!chainOk) {
+    walletWrap.innerHTML = `<button id="wallet" type="button" class="wallet-btn wrong" aria-haspopup="menu" aria-expanded="${menuOpen}">Wrong network <span class="chev">▾</span></button>` + walletMenu();
+  } else {
+    walletWrap.innerHTML = `<button id="wallet" type="button" class="wallet-btn" aria-haspopup="menu" aria-expanded="${menuOpen}" title="${escape(account)}">${avatar(account)}<span>${short(account)}</span><span class="net-badge">Diana</span><span class="chev">▾</span></button>` + walletMenu();
+  }
+  walletWrap.querySelector('#wallet').onclick = (event) => {
+    event.stopPropagation();
+    if (!account) void run(async () => { await connect({ choose: true }); alert('Wallet connected · ' + account, 'success'); });
+    else { menuOpen = !menuOpen; renderWallet(); if (menuOpen) void refreshBalance(); }
+  };
+  walletWrap.querySelector('.wallet-menu')?.addEventListener('click', onMenu);
+}
+
+function walletMenu() {
+  const name = listWallets().find((wallet) => wallet.id === walletId)?.name ?? 'Wallet';
+  const qor = qorAddressOf(account);
+  const pq = qorexAvailable()
+    ? '<div class="wm-pq ok"><b>QoreX detected.</b> Post-quantum (ML-DSA-87) signing is ready in this browser.</div>'
+    : '<div class="wm-pq"><b>QoreX not found.</b> Add the QoreX wallet to sign with your ML-DSA-87 key here, or use the signing tool.</div>';
+  return `<div class="wallet-menu" role="menu" ${menuOpen ? '' : 'hidden'}>
+    <div class="wm-head">${avatar(account, 'lg')}<span><strong>${short(account)}</strong><small title="${escape(qor)}">${escape(qor.slice(0, 12) + '…' + qor.slice(-6))}</small></span>
+      <span class="net-badge ${chainOk ? '' : 'bad'}">${chainOk ? 'Diana' : 'Wrong chain'}</span></div>
+    <div class="wm-balance"><span>Balance on Diana<small>via ${escape(name)}</small></span><b id="wm-balance">${balance === undefined ? '…' : shortBalance(balance)}</b></div>
+    ${chainOk ? '' : '<button class="wm-item attention" data-act="switch" role="menuitem"><i>⇄</i>Switch to QoreChain Diana</button>'}
+    <button class="wm-item" data-act="copy" role="menuitem"><i>⧉</i>Copy 0x address</button>
+    <button class="wm-item" data-act="copy-qor" role="menuitem"><i>⧉</i>Copy qor1 address</button>
+    ${address ? `<a class="wm-item" href="#${contractRoute('statement', account)}" data-act="close" role="menuitem"><i>◎</i>My earnings and limits</a>` : ''}
+    ${pq}
+    <div class="wm-sep"></div>
+    <button class="wm-item" data-act="change" role="menuitem"><i>↺</i>Change wallet</button>
+    <button class="wm-item danger" data-act="disconnect" role="menuitem"><i>⏻</i>Disconnect</button></div>`;
+}
+
+async function refreshBalance() {
+  if (!account) return;
+  const owner = account;
+  const value = await balanceOf(owner).catch(() => undefined);
+  if (owner !== account) return;
+  balance = value;
+  const target = document.querySelector('#wm-balance');
+  if (target) target.textContent = value === undefined ? 'unavailable' : shortBalance(value);
+}
+
+async function onMenu(event) {
+  const act = event.target.closest('[data-act]')?.dataset.act;
+  if (!act) return;
+  event.stopPropagation();
+  const copy = async (text, what) => {
+    try { await navigator.clipboard.writeText(text); alert(what + ' copied.', 'success'); } catch { alert(text); }
+  };
+  if (act === 'copy') await copy(account, 'Address');
+  else if (act === 'copy-qor') await copy(qorAddressOf(account), 'qor1 address');
+  else if (act === 'switch') {
+    await run(async () => { await switchToDiana(provider); await refreshChain(); alert('Switched to QoreChain Diana.', 'success'); });
+    return;
+  } else if (act === 'change') {
+    menuOpen = false;
+    await run(async () => { await connect({ choose: true, fresh: true }); alert('Wallet connected · ' + account, 'success'); });
+    return;
+  } else if (act === 'disconnect') disconnect();
+  menuOpen = false;
+  renderWallet();
+}
+
+function disconnect() {
+  provider?.removeListener?.('accountsChanged', onAccounts);
+  provider?.removeListener?.('chainChanged', onChain);
+  provider = account = walletId = balance = undefined;
+  chainOk = true;
+  menuOpen = false;
+  remember();
+  renderWallet();
+  alert('Wallet disconnected from Treaty.', 'info');
+  if (location.hash.startsWith('#earnings') && !busy) void render();
+void restoreWallet();
+}
+
+function onAccounts(accounts) {
+  const next = accounts?.[0];
+  if (!next) { disconnect(); return; }
+  account = getAddressSafe(next);
+  balance = undefined;
+  renderWallet();
+  if (location.hash === '#earnings' && !busy) void render();
+void restoreWallet();
+}
+const getAddressSafe = (value) => (isAddress(value ?? '') ? getAddress(value) : account);
+function onChain(id) { chainOk = Number(id) === DIANA_CHAIN_ID; renderWallet(); }
+async function refreshChain() {
+  const id = await walletChainId(provider);
+  chainOk = id === undefined || id === DIANA_CHAIN_ID;
+  renderWallet();
+}
+
+function use(wallet) {
+  if (provider && provider !== wallet.provider) {
+    provider.removeListener?.('accountsChanged', onAccounts);
+    provider.removeListener?.('chainChanged', onChain);
+  }
+  provider = wallet.provider;
+  walletId = wallet.id;
+  provider.on?.('accountsChanged', onAccounts);
+  provider.on?.('chainChanged', onChain);
+}
+
+/** The wallet picker. Resolves with the chosen wallet; rejects if closed. */
+function chooseWallet() {
+  return new Promise((resolve, reject) => {
+    const wallets = listWallets();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    const option = (wallet, i) => `<button class="wallet-option" data-i="${i}" type="button">${wallet.icon && /^data:image\//.test(wallet.icon)
+      ? `<img src="${escape(wallet.icon)}" alt="">` : `<span class="wicon">${escape(wallet.name.slice(0, 1))}</span>`}<span>${escape(wallet.name)}<small>${wallet.id === walletId ? 'Connected' : 'Detected in this browser'}</small></span>
+      ${remembered() === wallet.id ? '<span class="tag-right">Last used</span>' : ''}</button>`;
+    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="wallet-title">
+      <div class="modal-head"><h2 id="wallet-title">Connect a wallet</h2><button class="modal-close" type="button" aria-label="Close">✕</button></div>
+      <p>Your EVM wallet sends Treaty transactions on QoreChain Diana (chain ID 9800). Treaty never sees your keys.</p>
+      <div class="modal-group">${wallets.length ? 'Detected wallets' : 'No EVM wallet found'}</div>
+      <div class="wallet-list">${wallets.length ? wallets.map(option).join('') : `
+        <a class="wallet-option" href="https://metamask.io/download/" target="_blank" rel="noreferrer"><span class="wicon">M</span><span>Install MetaMask<small>Or any EVM wallet, then reload this page</small></span><span class="tag-right dim">Get ↗</span></a>`}</div>
+      <div class="modal-group">Post-quantum signing</div>
+      <div class="wallet-list"><div class="wallet-option" style="cursor:default"><span class="wicon">Q</span><span>QoreX<small>${qorexAvailable() ? 'Detected: signs your ML-DSA-87 approvals' : 'Signs ML-DSA-87 approvals in the browser'}</small></span>
+        <span class="tag-right ${qorexAvailable() ? '' : 'dim'}">${qorexAvailable() ? 'Ready' : 'Optional'}</span></div></div>
+      <div class="modal-foot">Agents and people sign the terms, deliveries and withdrawals with ML-DSA-87; the EVM wallet only pays gas and sends. New to Diana? <a href="https://dashboard.qorechain.io/faucet" target="_blank" rel="noreferrer">Get test QOR ↗</a></div></div>`;
+    const close = (error) => {
+      backdrop.remove();
+      document.removeEventListener('keydown', onKey);
+      if (error) reject(error);
+    };
+    const onKey = (event) => { if (event.key === 'Escape') close(new Error('Wallet connection cancelled.')); };
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop || event.target.closest('.modal-close')) { close(new Error('Wallet connection cancelled.')); return; }
+      const pick = event.target.closest('[data-i]');
+      if (pick) { close(); resolve(wallets[Number(pick.dataset.i)]); }
+    });
+    document.addEventListener('keydown', onKey);
+    document.body.append(backdrop);
+    backdrop.querySelector('.wallet-option, .modal-close')?.focus();
   });
 }
 
-async function connect() {
-  if (!provider) {
-    provider = selectWallet();
-    if (!provider) throw new Error('Open Treaty in a browser with MetaMask or a compatible EVM wallet.');
-    attachWalletEvents(provider);
+/**
+ * The connected account. Opens the wallet picker when asked to, or when the choice is not obvious:
+ * a remembered wallet or the only wallet in the browser is used directly.
+ */
+async function connect({ choose = false, fresh = false } = {}) {
+  if (!provider || fresh) {
+    const wallets = listWallets();
+    const known = wallets.find((wallet) => wallet.id === remembered());
+    const wallet = !choose && !fresh && (known ?? (wallets.length === 1 ? wallets[0] : undefined)) || await chooseWallet();
+    use(wallet);
   }
   account = await requestWallet(provider);
-  refreshWalletLabel();
+  remember(walletId);
+  balance = undefined;
+  await refreshChain();
   return account;
 }
+
+/** Restore a remembered session quietly, without a wallet prompt. */
+async function restoreWallet() {
+  const id = remembered();
+  if (!id) { renderWallet(); return; }
+  await new Promise((resolve) => setTimeout(resolve, 250)); // let wallets announce themselves
+  const wallet = listWallets().find((candidate) => candidate.id === id);
+  const found = wallet && await authorizedAccount(wallet.provider);
+  if (!found) { renderWallet(); return; }
+  use(wallet);
+  account = found;
+  await refreshChain();
+}
+document.addEventListener('click', (event) => {
+  if (menuOpen && !walletWrap.contains(event.target)) { menuOpen = false; renderWallet(); }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && menuOpen) { menuOpen = false; renderWallet(); }
+});
 
 async function run(action) {
   if (busy) return;
@@ -132,7 +312,7 @@ function splitCard(terms, heading = 'Payment breakdown', exactCredits, note = ''
   const credits = exactCredits ?? splitAmounts(price, shares);
   const rows = recipients.map((recipient, i) =>
     '<li><span class="swatch c' + i + '"></span><span title="' + escape(recipient) + '">' +
-    escape(recipient) + '<small>' + shareLabel(shares[i]) +
+    escape(/^0x[\da-fA-F]{40}$/.test(recipient) ? short(recipient) : recipient) + '<small>' + shareLabel(shares[i]) +
     '</small></span><strong>' + formatQor(credits[i]) + '</strong></li>'
   ).join('');
   return '<section class="card breakdown"><div class="card-head"><h2>' + heading +
@@ -272,8 +452,8 @@ const howItWorks = `<section class="card process"><h2>Why it holds</h2><ul>
   <li>${icon('4')}<span><strong>Owners keep agents on a leash</strong><small>Spending limits the contract enforces, and an off switch.</small></span></li>
 </ul></section>`;
 
-const intro = `<h1>Treaties between people and AI agents.<br><em>Nobody holds the money.</em></h1>
-  <p>Every party signs the terms with a post-quantum key. The contract holds the money and pays out only as agreed, so a stolen wallet key gets nothing, and an agent cannot spend past the limits its owner set.</p>`;
+const intro = `<p class="eyebrow">Make a treaty</p><h1>Set the terms. Everyone signs.</h1>
+  <p>Choose a service treaty to hire an agent, or a team of agents, for units of work, or a revenue share to split every payment. Nothing is binding until every party signs the exact terms with its post-quantum key, and the contract holds the money from then on.</p>`;
 
 async function createPage(previousId, revision) {
   let previous;
@@ -473,7 +653,7 @@ async function agreementPage(id, revision) {
   if (agreement.state === 'Pending') {
     main = `<section class="card action"><div class="tag warn">${label} · ${signedCount} of ${agreement.signers.length}</div>
       <h2>Every party signs these terms</h2>
-      <p>Send this page to every party. People sign with QoreX right here (the button next to their address) or with the Treaty signing tool; agents sign with the Treaty SDK. Every signature is ML-DSA-87, checked on chain.</p>
+      <p>Send this page to every party. People sign with the Treaty signing tool (the command below), or right here with QoreX once their QoreX can sign messages; agents sign with the Treaty SDK. Every signature is ML-DSA-87, checked on chain.</p>
       ${qorexAvailable() ? '' : qorexHint()}
       ${command('npm run pq -- sign ' + id)}
       <p>To send a signature from another wallet, add <code>--out signature.json</code> and paste the file below.</p>
@@ -581,7 +761,7 @@ async function agreementPage(id, revision) {
       document.querySelector('#payments').innerHTML = '<h3>Payments</h3><ul class="history">' + payments.map((payment) =>
         `<li><span>Delivery ${payment.unit} · ${payment.how === 'Accepted' ? 'accepted' : 'released'}
         <small>${payment.native ? 'Verified on EVM and Native · receipt #' + escape(payment.native.id) : 'EVM confirmed · ' + escape(payment.nativeError)}</small></span>
-        <a href="${explorerTx(payment.hash)}" target="_blank" rel="noreferrer">View</a></li>`).join('') + '</ul>';
+        <a href="${explorerTx(payment.hash)}">View</a></li>`).join('') + '</ul>';
     }).catch(() => {});
   }
 }
@@ -706,6 +886,45 @@ function mandateCard(who, mandate, off) {
     ${command(off ? 'npm run pq -- withdraw all --for ' + who : 'npm run pq -- revoke ' + who)}</section>`;
 }
 
+const uqorText = (value) => formatQor(BigInt(value) * 10n ** 12n);
+
+/** QoreChain's own spending rules for this account, or for the owner whose account an agent spends from. */
+function smartAccountCard(state, { whose, ownerOf }) {
+  const now = Date.now() / 1000;
+  const keys = state.authenticators.map((key) => {
+    const expired = Number(key.expiryUnix) < now;
+    const status = key.revoked ? ['Revoked', 'muted'] : expired ? ['Expired', 'muted'] : ['Active', 'ok'];
+    return `<li><span>${escape(key.label || 'Linked key')}<small>${escape(key.scheme)} key ${escape(key.pubkeyHex.slice(0, 10))}… · may: ${escape(key.permissions.join(', '))} · until ${new Date(Number(key.expiryUnix) * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small></span>
+      <span class="tag ${status[1]}">${status[0]}</span></li>`;
+  }).join('');
+  const rules = state.rules.map((rule) => `<div class="rule${rule.enabled ? '' : ' off'}">
+      <dl class="totals"><dt>Per call</dt><dd>${Number(rule.perTxLimit) ? uqorText(rule.perTxLimit) : 'no limit'}</dd>
+      <dt>Per day</dt><dd>${Number(rule.dailyLimit) ? uqorText(rule.dailyLimit) : 'no limit'}</dd>
+      <dt>Coins</dt><dd>${rule.allowedDenoms.length ? escape(rule.allowedDenoms.join(', ').replace('uqor', 'QOR')) : 'any'}</dd></dl>
+      <div class="calls">${rule.calls.length ? rule.calls.map((call) => `<span class="chip-call">${escape(call)}</span>`).join('') : '<span class="chip-call">value transfers only</span>'}</div></div>`).join('');
+  return `<section class="card action smart-card"><div class="tag ok">Enforced by QoreChain</div>
+    <h2>Chain-enforced spending rules</h2>
+    <p>${ownerOf ? `This agent spends its owner’s money only through a key linked to the owner’s account, <span title="${escape(state.qorAddress)}">${escape(state.qorAddress.slice(0, 12))}…</span>. ` : ''}QoreChain’s smart-account module checks every call a linked key makes against these rules before it runs, then Treaty checks its own. Linking, changing and revoking need ${whose} hybrid ML-DSA-87 signature.</p>
+    ${rules || '<p class="muted">No spending rule.</p>'}
+    <h3>Linked keys</h3><ul class="history">${keys || '<li><span class="muted">None</span></li>'}</ul>
+    ${command('npm run accounts -- session-status')}</section>`;
+}
+
+async function renderSmartAccount(who, mandate, revision) {
+  const slot = document.querySelector('#smart-account');
+  const owner = mandate?.owner;
+  const [own, owners] = await Promise.all([
+    getSmartAccount(who).catch(() => undefined),
+    owner ? getSmartAccount(owner).catch(() => undefined) : undefined,
+  ]);
+  if (revision !== rendering || !slot) return;
+  slot.innerHTML = [
+    own?.smartAccount ? smartAccountCard(own, { whose: 'this account’s' }) : '',
+    owners?.smartAccount ? smartAccountCard(owners, { whose: 'the owner’s', ownerOf: true }) : '',
+  ].join('');
+  bindCopy();
+}
+
 async function statementPage(who, revision) {
   if (!validAddress(who)) throw new Error('Invalid address.');
   const statement = await getStatement(who);
@@ -725,6 +944,7 @@ async function statementPage(who, revision) {
       <p>Add <code>--to 0x…</code> to send elsewhere, or <code>--out withdrawal.json</code> to submit from any wallet below.</p>
       <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('statement', who)))}">Copy statement link</button></section>
       ${statement.mandate ? mandateCard(who, statement.mandate, switchedOff) : ''}
+      <div id="smart-account"></div>
       ${relayForm('Paste a withdrawal, or an owner’s limits or off switch, signed with the signing tool or an agent.')}</div>
     <div class="stack"><section class="card ledger"><h2>Earning from</h2>${rows
       ? '<div class="table"><table><thead><tr><th>Treaty</th><th>Share</th><th>Paid</th><th>Earned</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -751,11 +971,12 @@ async function statementPage(who, revision) {
       args: (signature) => [who, signature], done: () => show(contractRoute('statement', who), 'The agent is switched off.'),
     });
   }
+  void renderSmartAccount(who, statement.mandate, revision);
   void getWithdrawals(who).then((withdrawals) => {
     if (revision !== rendering) return;
     document.querySelector('#withdrawals').innerHTML = withdrawals.length
       ? '<ul class="history">' + withdrawals.reverse().map((item) => `<li><span>${formatQor(item.amount)} to <span title="${escape(item.to)}">${short(item.to)}</span>
-        <small>Withdrawal #${item.nonce} · block ${item.block}</small></span><a href="${explorerTx(item.hash)}" target="_blank" rel="noreferrer">View</a></li>`).join('') + '</ul>'
+        <small>Withdrawal #${item.nonce} · block ${item.block}</small></span><a href="${explorerTx(item.hash)}">View</a></li>`).join('') + '</ul>'
       : '<p class="muted">No withdrawals yet.</p>';
   }).catch(() => {
     if (revision !== rendering) return;
@@ -792,9 +1013,59 @@ async function receiptPage(hash, revision) {
     <dl><dt>Payer</dt><dd>${escape(payment.payer)}</dd><dt>EVM block</dt><dd>${receipt.blockNumber}</dd><dt>Native receipt ID</dt><dd>${native ? escape(native.id) : 'Unverified'}</dd>
     <dt>Receipt commitment</dt><dd>${escape(payment.commitment)}</dd></dl>
     ${nativeError ? '<p class="muted">' + escape(nativeError) + '</p>' : ''}
-    <div class="actions"><a class="secondary" href="${explorerTx(hash)}" target="_blank" rel="noreferrer">View transaction</a>
+    <div class="actions"><a class="secondary" href="${explorerTx(hash)}">Transaction details</a>
     <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('receipt', hash)))}">Copy receipt link</button></div></section>
     ${splitCard(agreement, 'Shares credited', payment.credits)}</div>`;
+  bindCopy();
+}
+
+const eventText = {
+  Proposed: (a) => ['Treaty #' + a.id + ' proposed', 'The terms are on chain; every party must now sign them.'],
+  Signed: (a) => ['Treaty #' + a.id + ' signed by ' + short(a.signer), 'An ML-DSA-87 signature over the exact terms, checked with pqcVerify.'],
+  Activated: (a) => ['Treaty #' + a.id + ' is live', 'Every party has signed; the terms are recorded on QoreChain Native.'],
+  Superseded: (a) => ['Treaty #' + a.previous + ' replaced by #' + a.successor, 'Every old and new party signed the new version.'],
+  Cancelled: (a) => ['Treaty #' + a.id + ' cancelled', 'The proposal was withdrawn before it went live.'],
+  Checkout: (a) => [formatQor(a.total) + ' paid into treaty #' + a.id, 'Every share credited in this transaction, with a receipt on Native.'],
+  Funded: (a) => [formatQor(a.amount) + ' locked in treaty #' + a.id, 'The budget is held by the contract until work is paid or refunded.'],
+  Delivered: (a) => ['Delivery ' + a.unit + ' of treaty #' + a.id, 'By ' + short(a.provider) + ', signed with ML-DSA-87. Work hash ' + short(a.deliverable) + '.'],
+  Rejected: (a) => ['Delivery ' + a.unit + ' of treaty #' + a.id + ' rejected', 'The client rejected it within the review period; nothing was paid.'],
+  Paid: (a) => ['Delivery ' + a.unit + ' of treaty #' + a.id + ' paid', (a.how === 2 ? 'Accepted by the client. ' : 'Released after the review period. ') + 'Credited: ' + a.credits.map(formatQor).join(' + ') + '.'],
+  Refunded: (a) => [formatQor(a.amount) + ' returned from treaty #' + a.id, 'Unused budget after the deadline, sent to ' + short(a.to) + '.'],
+  MandateSet: (a) => ['Limits set for agent ' + short(a.agent), 'Owner ' + short(a.owner) + ': ' + formatQor(a.maxPerTreaty) + ' per treaty, ' + formatQor(a.maxTotal) + ' in total. Both signed with ML-DSA-87.'],
+  MandateRevoked: (a) => ['Agent ' + short(a.agent) + ' switched off', 'By its owner ' + short(a.owner) + '. Only the owner can move its money now.'],
+  Withdrawn: (a) => [formatQor(a.amount) + ' withdrawn', 'From the earnings of ' + short(a.recipient) + ' to ' + short(a.to) + ', signed with ML-DSA-87.'],
+};
+
+/** One transaction, read from Diana and explained. */
+async function txPage(hash, revision) {
+  if (!validHash(hash)) throw new Error('Invalid transaction hash.');
+  const [details, cosmosTx] = await Promise.all([describeTransaction(hash), cosmosHashOf(hash)]);
+  if (revision !== rendering) return;
+  const { receipt, transaction, events, time, fee } = details;
+  const ok = receipt.status === 'success';
+  const rows = events.map(({ name, args, native, nativeError }) => {
+    const [title, text] = eventText[name]?.(args) ?? [name, ''];
+    const nativeLine = native ? '<span class="amount-tag">Native receipt #' + escape(native.id) + ' verified</span>'
+      : nativeError ? '<span class="amount-tag warn-tag">Native: ' + escape(nativeError) + '</span>' : '';
+    return `<article class="event"><span class="dot">✓</span><div><h3>${escape(title)}</h3><p>${escape(text)}</p>${nativeLine}</div><div class="meta">${escape(name)}</div></article>`;
+  }).join('');
+  const explorerLink = cosmosTx ? 'https://explore.qore.network/tx/' + cosmosTx : undefined;
+  content.innerHTML = `<div class="intro"><p class="eyebrow">Transaction on QoreChain Diana</p><h1>${ok ? 'Confirmed' : 'Reverted'}${events.length ? ' · ' + escape(eventText[events.at(-1).name]?.(events.at(-1).args)[0] ?? events.at(-1).name) : ''}</h1>
+    <p>Read just now from Diana's EVM, and checked against QoreChain Native where the transaction wrote a receipt.</p></div>
+    <div class="layout"><div class="stack">
+      <section class="card"><div class="card-head"><h2>What happened</h2><span class="tag ${ok ? 'ok' : 'warn'}">${ok ? 'Success' : 'Reverted'}</span></div>
+        ${rows ? '<div class="timeline tx-events">' + rows + '</div>' : '<p class="muted">This transaction emitted no Treaty events.</p>'}</section>
+    </div>
+    <section class="card action"><h2>Details</h2>
+      <dl><dt>EVM hash</dt><dd>${escape(hash)}</dd><dt>Explorer (Cosmos) hash</dt><dd>${escape(cosmosTx ?? 'not found')}</dd>
+      <dt>Block</dt><dd>${receipt.blockNumber} · ${escape(time.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' }))}</dd>
+      <dt>From</dt><dd><a href="#${contractRoute('statement', transaction.from)}">${escape(transaction.from)}</a></dd>
+      <dt>To</dt><dd>${escape(receipt.to ?? receipt.contractAddress ?? '—')}</dd>
+      <dt>Gas used · fee</dt><dd>${receipt.gasUsed.toLocaleString('en-US')} · ${formatQor(fee)}</dd></dl>
+      ${explorerLink ? `<a class="secondary arrow" href="${explorerLink}" target="_blank" rel="noreferrer">Open in QoreChain Explorer</a>
+        <p class="muted small-note">The explorer opens on mainnet. Choose <strong>Testnet</strong> at the top of the explorer, then open this link again.</p>` : ''}
+      <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('tx', hash)))}">Copy link to this page</button>
+    </section></div>`;
   bindCopy();
 }
 
@@ -835,7 +1106,7 @@ async function render() {
   const [route, deployment, parameter, extra] = (location.hash.slice(1) || 'home').split('/');
   alert('');
   const section = route === 'home' ? (deployment === 'how' ? 'how' : '') :
-    ({ agreement: 'create', pay: 'create', service: 'create', statement: 'earnings', receipt: 'verify' }[route] ?? route);
+    ({ agreement: '', pay: '', tx: '', service: 'create', statement: 'earnings', receipt: 'verify' }[route] ?? route);
   content.className = 'shell page';
   for (const link of document.querySelectorAll('[data-route]')) {
     if (link.dataset.route === section) link.setAttribute('aria-current', 'page');
@@ -849,7 +1120,7 @@ async function render() {
     else if (route === 'verify') verifyPage();
     else if (route === 'earnings') earningsPage();
     else if (route === 'submit') submitPage();
-    else if (['create', 'agreement', 'pay', 'receipt', 'statement'].includes(route)) {
+    else if (['create', 'agreement', 'pay', 'receipt', 'statement', 'tx'].includes(route)) {
       if (extra !== undefined || !address || deployment?.toLowerCase() !== address.toLowerCase()) {
         throw new Error('This link requires its original Treaty Diana deployment.');
       }
@@ -858,6 +1129,7 @@ async function render() {
       else if (route === 'agreement') await agreementPage(parameter, revision);
       else if (route === 'pay') await payPage(parameter, revision);
       else if (route === 'statement') await statementPage(parameter, revision);
+      else if (route === 'tx') await txPage(parameter ?? '', revision);
       else await receiptPage(parameter ?? '', revision);
     } else throw new Error('This page does not exist.');
     if (flash && revision === rendering) {
@@ -872,17 +1144,6 @@ async function render() {
   }
 }
 
-walletButton.onclick = () => void run(async (route) => {
-  const signer = await connect();
-  if (location.href !== route) return;
-  if (location.hash === '#earnings') await render();
-  else {
-    const state = await checkWindow(signer).catch(() => undefined);
-    if (location.href !== route) return;
-    alert(state?.problem
-      ? 'Wallet connected, but ' + state.qorAddress + ' ' + state.problem + '. Open one before sending.'
-      : 'Wallet connected · ' + signer, state?.problem ? 'info' : 'success');
-  }
-});
 window.addEventListener('hashchange', render);
 void render();
+void restoreWallet();

@@ -15,7 +15,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
-  DeliveryStatus, Kind, RELAYABLE, Status, budgetOf, deliverableHash, deliveryMessage, isService, mandateMessage, revokeMessage,
+  DeliveryStatus, Kind, RELAYABLE, Status, budgetOf, deliverableHash, deliveryMessage, isService, mandateMessage, parseSignedRequest, revokeMessage,
   reviewMessage, signedRequest, splitAmounts, termsHash, termsMessage, windowProblem, withdrawalMessage,
 } from '../src/protocol.js';
 import { loadSigner, registeredKey } from './pqc.mjs';
@@ -290,6 +290,17 @@ export class Treaty {
     return this.#relayOrSend('revokeMandate', { agent, ownerSignature: me.sign(message) }, options);
   }
 
+  /**
+   * Send a signed request someone else made (with { relay: true }), from this account. It authorises
+   * nothing by itself: the contract checks the ML-DSA-87 signature inside against the signer's key.
+   */
+  async relay(request) {
+    const { action, args } = parseSignedRequest(typeof request === 'string' ? request : JSON.stringify(request), {
+      chainId: this.chain.id, contract: this.contract,
+    });
+    return this.#send(action, args);
+  }
+
   /** Whether this account's ML-DSA-87 key matches the one registered on chain. */
   async keyCheck() {
     const me = this.#me();
@@ -370,6 +381,25 @@ export class Treaty {
       } catch { /* other events */ }
     }
     throw new Error('No ' + name + ' event in ' + receipt.transactionHash);
+  }
+
+  /**
+   * The QoreChain explorer link for an EVM transaction. The explorer lists Cosmos hashes and opens
+   * on mainnet (choose Testnet at its top), so this looks the Cosmos hash up on Native REST.
+   */
+  async explorerLink(hash) {
+    const cosmosTx = await this.cosmosHash(hash);
+    return cosmosTx ? 'https://explore.qore.network/tx/' + cosmosTx : undefined;
+  }
+
+  async cosmosHash(hash) {
+    try {
+      const query = encodeURIComponent("ethereum_tx.ethereumTxHash='" + hash.toLowerCase() + "'");
+      const response = await fetch(this.rest + '/cosmos/tx/v1beta1/txs?query=' + query, { signal: AbortSignal.timeout(10_000) });
+      return response.ok ? (await response.json()).tx_responses?.[0]?.txhash : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Decode this contract's events from a receipt. */

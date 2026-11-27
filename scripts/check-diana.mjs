@@ -9,6 +9,8 @@
 //    reaches the real key registry and verifier with the expected errors.
 // 3. The Cross-VM bridge writes to the pinned receipt book and replies in the format
 //    the contract and app parse, and Native REST returns receipts and windows as expected.
+// 4. The smart-account (abstractaccount) module is on, lets a linked key hold the "evm"
+//    permission, verifies the v2 MsgExecuteEVM digest, and stores rules in the format Treaty writes.
 import { readFile } from 'node:fs/promises';
 import { generatePqcKeypair, pqcSign } from '@qorechain/sdk';
 import solc from 'solc';
@@ -17,7 +19,9 @@ import {
   http, toHex,
 } from 'viem';
 import { NATIVE_REST, RECEIPTS } from '../server/native.mjs';
+const { parties: { owner: { qor: OLIVIA } } } = JSON.parse(await readFile(new URL('../deployments/diana.json', import.meta.url)));
 import { termsMessage, withdrawalMessage } from '../src/protocol.js';
+import { generateSessionKey, readSmartAccount, sessionCall, sessionKey, sessionRule, treatyCallPolicy } from '../sdk/smart-account.mjs';
 
 const RPC = process.env.QORE_EVM_RPC?.trim() || 'https://evm-testnet.qore.host';
 const chain = defineChain({
@@ -78,11 +82,36 @@ const gas = await client.estimateGas({
 });
 console.log('        one verification costs about ' + gas + ' gas, calldata included');
 
-console.log('Treaty inside a call on Diana');
 // A contract-creation call needs a sender whose live EVM window allows creation (no target list).
 // Any recent EVM sender also has a registered ML-DSA-87 key, which the sign check below uses.
 const { bech32 } = await import('@scure/base');
 const qorOf = (account) => bech32.encode('qor', bech32.toWords(hexToBytes(account)));
+console.log('Smart-account sessions (abstractaccount)');
+// Smart-account sessions: everything read-only; the live calls run in `npm run demo:session`.
+const config = await rest('/qorechain/abstractaccount/v1/config');
+check('the smart-account module is enabled', config.body?.config?.enabled === true,
+  'up to ' + config.body?.config?.max_spending_rules + ' rules and ' + config.body?.config?.max_session_keys + ' keys per account');
+const schema = await rest('/qorechain/abstractaccount/v1/permission_schema');
+check('a linked key may hold the "evm" permission, and it is not a key-management permission',
+  schema.body?.permissions?.includes('evm') && !(schema.body?.key_management_msgs ?? []).some((msg) => /ExecuteEVM/.test(msg)));
+const probeContract = '0x' + '11'.repeat(20);
+const sessionProbe = await sessionCall({
+  session: sessionKey(generateSessionKey()), owner: OLIVIA, relayer: OLIVIA, to: probeContract,
+  data: encodeFunctionData({ abi, functionName: 'refund', args: [1n] }),
+});
+check('Diana verifies the v2 MsgExecuteEVM digest (it binds the gas limit), and a fresh key starts at nonce 0',
+  sessionProbe.digestVersion === 'v2' && sessionProbe.nonce === 0n);
+const accounts = await rest('/qorechain/abstractaccount/v1/accounts?pagination.limit=50');
+const scoped = (accounts.body?.accounts ?? []).find((account) => account.spending_rules_count > 0 && account.authenticators_count > 0);
+const stored = scoped && await readSmartAccount({ owner: scoped.address });
+const callFormat = /^0x[\da-f]{40}\/0x[\da-f]{8}$/;
+const ours = sessionRule({ contract: probeContract, perCall: 6n * 10n ** 18n, perDay: 6n * 10n ** 18n });
+check('stored rules use the call-policy format Treaty writes ("0x<contract>/0x<selector>")',
+  stored && stored.rules.some((rule) => rule.allowedEvmCalls.some((entry) => callFormat.test(entry))) && treatyCallPolicy(probeContract).every((entry) => callFormat.test(entry)) &&
+  ours.allowedEvmCalls.length === 2, scoped ? 'compared with ' + scoped.address : 'no scoped account found');
+
+
+console.log('Treaty inside a call on Diana');
 const recent = await (async () => {
   const latest = await client.getBlockNumber();
   const seen = new Set();

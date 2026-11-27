@@ -1,6 +1,6 @@
 import {
   BaseError, ContractFunctionRevertedError, createPublicClient, createWalletClient, custom, decodeAbiParameters,
-  decodeEventLog, defineChain, formatEther, getAddress, hexToBytes, hexToString, http, isAddress, parseEther, zeroAddress,
+  decodeEventLog, defineChain, formatEther, getAddress, hexToBytes, hexToString, http, isAddress, parseEther, toFunctionSelector, zeroAddress,
 } from 'viem';
 import { bech32 } from '@scure/base';
 import artifact from '../artifacts/Treaty.json';
@@ -94,21 +94,48 @@ export function validateService({ title, priceText, unitsText, deadline, reviewM
 }
 
 const announcedWallets = new Map();
+const isQorexProvider = (provider, rdns = '') => provider?.isQoreX || rdns === 'network.qore.qorex';
 window.addEventListener('eip6963:announceProvider', ({ detail }) => {
-  if (detail?.info?.rdns && typeof detail.provider?.request === 'function') {
-    announcedWallets.set(detail.info.rdns, detail.provider);
+  const info = detail?.info;
+  if (info?.rdns && typeof detail.provider?.request === 'function' && !isQorexProvider(detail.provider, info.rdns)) {
+    announcedWallets.set(info.rdns, { id: info.rdns, name: String(info.name || info.rdns).slice(0, 40), icon: info.icon, provider: detail.provider });
   }
 });
 window.dispatchEvent(new Event('eip6963:requestProvider'));
 
-export function selectWallet() {
+/**
+ * The EVM wallets in this browser (EIP-6963), or the injected one for wallets that do not announce.
+ * QoreX is left out: it signs Treaty's post-quantum messages, while an EVM wallet sends the transactions.
+ */
+export function listWallets() {
   window.dispatchEvent(new Event('eip6963:requestProvider'));
-  const listed = window.ethereum?.providers ?? [window.ethereum];
-  return announcedWallets.get('io.metamask') ??
-    listed.find((provider) => provider?.isMetaMask && !provider?.isQoreX) ??
-    [...announcedWallets].find(([rdns, provider]) => rdns !== 'network.qore.qorex' && !provider.isQoreX)?.[1] ??
-    listed.find((provider) => typeof provider?.request === 'function' && !provider.isQoreX);
+  const wallets = [...announcedWallets.values()];
+  if (!wallets.length) {
+    const listed = window.ethereum?.providers ?? [window.ethereum];
+    const injected = listed.find((provider) => typeof provider?.request === 'function' && !isQorexProvider(provider));
+    if (injected) {
+      const name = injected.isRabby ? 'Rabby' : injected.isCoinbaseWallet ? 'Coinbase Wallet' : injected.isMetaMask ? 'MetaMask' : 'Browser wallet';
+      wallets.push({ id: 'injected', name, provider: injected });
+    }
+  }
+  return wallets.sort((a, b) => (b.id === 'io.metamask') - (a.id === 'io.metamask'));
 }
+
+/** Diana's chain ID as the wallet reports it, or undefined if it will not say. */
+export async function walletChainId(provider) {
+  try { return Number(await provider.request({ method: 'eth_chainId' })); } catch { return undefined; }
+}
+
+/** The account the wallet already allows this site to see, without a prompt. */
+export async function authorizedAccount(provider) {
+  try {
+    const [account] = await provider.request({ method: 'eth_accounts' });
+    return isAddress(account ?? '') ? getAddress(account) : undefined;
+  } catch { return undefined; }
+}
+
+export const balanceOf = (account) => client.getBalance({ address: account });
+export const DIANA_CHAIN_ID = chain.id;
 
 export async function requestWallet(provider) {
   const [account] = await provider.request({ method: 'eth_requestAccounts' });
@@ -382,4 +409,80 @@ export async function getRefundable(id) {
 /** The latest block time, for deadlines and review periods. */
 export async function chainTime() {
   return (await client.getBlock()).timestamp;
+}
+
+/** The QoreChain explorer's (Cosmos) hash of an EVM transaction, or undefined if it cannot be found. */
+export async function cosmosHashOf(hash) {
+  try {
+    const response = await fetch('/api/native/evm-tx/' + hash, { signal: AbortSignal.timeout(10_000) });
+    return response.ok ? (await response.json()).cosmosTx : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read a transaction from Diana and explain what it did in Treaty: its status, block and
+ * time, each Treaty event, and the QoreChain Native receipt behind each agreement or payment.
+ */
+export async function describeTransaction(hash) {
+  await assertDeployment();
+  if (!/^0x[\da-f]{64}$/i.test(hash)) throw new Error('That is not a transaction hash.');
+  const receipt = await client.getTransactionReceipt({ hash }).catch(() => {
+    throw new Error('Diana has no transaction with this hash.');
+  });
+  const [block, transaction] = await Promise.all([
+    client.getBlock({ blockNumber: receipt.blockNumber }), client.getTransaction({ hash }),
+  ]);
+  const events = [];
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== address.toLowerCase()) continue;
+    let event;
+    try { event = decodeEventLog({ abi, ...log }); } catch { continue; }
+    const item = { name: event.eventName, args: event.args };
+    try {
+      if (event.eventName === 'Activated') {
+        Object.assign(item, await verifyAgreement(event.args.id, await getAgreement(event.args.id)));
+      } else if (event.eventName === 'Paid') {
+        const agreement = await getAgreement(event.args.id);
+        const delivery = await read('getDelivery', [event.args.id, event.args.unit]);
+        const commitment = deliveryCommitment({
+          chainId: chain.id, contract: address, id: event.args.id, unit: event.args.unit, deliverable: delivery.deliverable,
+          recipients: agreement.recipients, credits: event.args.credits,
+        });
+        Object.assign(item, commitment === event.args.commitment
+          ? await checkNativeReceipt(event.args.nativeReply, deliveryNote(commitment), receipt.blockNumber)
+          : { nativeError: 'The payment does not match its commitment.' });
+      } else if (event.eventName === 'Checkout') {
+        Object.assign(item, await verifyReceipt(hash).then(({ native, nativeError }) => ({ native, nativeError })));
+      }
+    } catch (error) {
+      item.nativeError = error?.message ?? 'Native verification failed.';
+    }
+    events.push(item);
+  }
+  return {
+    receipt, transaction, events, time: new Date(Number(block.timestamp) * 1000),
+    fee: receipt.gasUsed * receipt.effectiveGasPrice, isTreaty: receipt.to?.toLowerCase() === address.toLowerCase() || events.length > 0,
+  };
+}
+
+const selectorNames = Object.fromEntries(abi.filter((item) => item.type === 'function').map((item) => [toFunctionSelector(item), item.name]));
+
+/**
+ * The spending rules and linked keys QoreChain itself enforces for `account` (its abstractaccount
+ * module, read through the Native route). Allowed calls are named when they target this Treaty.
+ */
+export async function getSmartAccount(account) {
+  const qorAddress = qorAddressOf(account);
+  const response = await fetch('/api/native/smart-account/' + qorAddress, { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error('Could not read the smart account from Diana.');
+  const body = await response.json();
+  const describe = (entry) => {
+    const [target, selector] = entry.split('/');
+    const treaty = address && target?.toLowerCase() === address.toLowerCase();
+    const name = treaty ? 'Treaty' : short(target ?? '');
+    return selector ? name + '.' + (treaty ? selectorNames[selector] ?? selector : selector) : 'any call to ' + name;
+  };
+  return { ...body, qorAddress, rules: body.rules.map((rule) => ({ ...rule, calls: rule.allowedEvmCalls.map(describe) })) };
 }

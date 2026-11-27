@@ -7,6 +7,12 @@
 //   deploy     open a short window for the deployer, deploy Treaty, and save its address
 //   windows    open each party's scoped window: only the Treaty contract, capped transactions,
 //              value and blocks. These are the agents' on-chain limits the AI Agents track asks for.
+//   session [perCall] [perDay] [hours]
+//              the owner links the research agent's session key to the OWNER's account, under a
+//              spending rule QoreChain enforces: only Treaty.fund and Treaty.refund, at most perCall
+//              and perDay QOR (default 6 and 6), for `hours` (default 24). One hybrid transaction.
+//   session-status   what the chain enforces for that session, read back from Diana
+//   session-revoke   the owner switches the session key off, in one transaction
 //   seal-keys  publish each agent's ML-KEM-1024 key in QoreChain's KEM key registry, so providers
 //              can seal deliveries to it by address (QoreSeal); see sdk/seal.mjs
 //
@@ -21,8 +27,10 @@ import {
   KEM_ALGORITHM_ML_KEM_1024, isRegisteredPqcKey, msg, openEvmWindowMsg, signProofOfPossession,
 } from '@qorechain/sdk';
 import { fetchKemKey } from '@qorechain/qoreseal/network';
-import { formatEther, getAddress, isAddress } from 'viem';
+import { formatEther, getAddress, isAddress, parseEther } from 'viem';
+import { broadcast as nativeBroadcast, lookupTx } from '../sdk/native.mjs';
 import { sealKeysFor } from '../sdk/seal.mjs';
+import { generateSessionKey, linkSessionMsgs, readSmartAccount, revokeSessionMsg, sessionKey } from '../sdk/smart-account.mjs';
 
 const FILE = process.env.TREATY_ACCOUNTS_FILE ? new URL('file://' + process.env.TREATY_ACCOUNTS_FILE) : new URL('../.env.diana', import.meta.url);
 const ROLES = [
@@ -199,9 +207,64 @@ const commands = {
   },
 };
 
+async function sessionParties() {
+  const values = await loadFile();
+  const contract = values.VITE_TREATY_ADDRESS;
+  if (!isAddress(contract ?? '')) throw new Error('Deploy first: npm run accounts -- deploy');
+  const [, owner, researcher] = await accounts();
+  let secret = values.SESSION_KEY_RESEARCHER;
+  if (!secret) {
+    secret = generateSessionKey();
+    await setEnv('SESSION_KEY_RESEARCHER', secret);
+    console.log('Created the research agent’s session key (ed25519) in .env.diana. It holds no money.');
+  }
+  return { contract: getAddress(contract), owner: owner.account, researcher: researcher.account, session: sessionKey(secret) };
+}
+
+const qorText = (amount) => {
+  if (!/^\d+(\.\d{1,6})?$/.test(amount)) throw new Error('Give amounts in QOR, like 6 or 2.5.');
+  return parseEther(amount);
+};
+
+Object.assign(commands, {
+  async session() {
+    const [perCall = '6', perDay = '6', hours = '24'] = process.argv.slice(3);
+    const { contract, owner, session } = await sessionParties();
+    const messages = linkSessionMsgs({
+      owner: owner.cosmos, session, contract, perCall: qorText(perCall), perDay: qorText(perDay), hours: Number(hours),
+      label: 'Treaty research agent',
+    });
+    const sent = await nativeBroadcast(owner, messages, { memo: 'Treaty: link the research agent session' });
+    const tx = await lookupTx(sent.transactionHash);
+    console.log('Linked the research agent’s session key to ' + owner.cosmos + (tx.hybrid ? ' (hybrid ML-DSA-87: verified)' : ''));
+    console.log('  may call  only Treaty.fund and Treaty.refund on ' + contract);
+    console.log('  limits    ' + perCall + ' QOR per call, ' + perDay + ' QOR per day, for ' + hours + ' hours');
+    console.log('  tx        ' + sent.transactionHash);
+  },
+
+  async 'session-status'() {
+    const { contract, owner, session } = await sessionParties();
+    const state = await readSmartAccount({ owner: owner.cosmos, session, contract, rest: NET.rest });
+    console.log('Smart account ' + owner.cosmos + ' · balance ' + formatEther(await balanceOf(owner.cosmos)) + ' QOR');
+    for (const rule of state.rules) {
+      console.log('  rule "' + rule.id + '" ' + (rule.enabled ? 'on' : 'off') + ': ' + formatEther(rule.perTxLimit * 10n ** 12n) + ' QOR per call, ' +
+        formatEther(rule.dailyLimit * 10n ** 12n) + ' QOR per day, only ' + (rule.allowedEvmCalls.map(state.describe).join(', ') || 'value transfers'));
+    }
+    if (!state.key) { console.log('  session key: not linked. Run: npm run accounts -- session'); return; }
+    console.log('  session key: ' + (state.key.revoked ? 'REVOKED' : 'linked') + ', may: ' + state.key.permissions.join(',') +
+      ', expires ' + new Date(Number(state.key.expiryUnix) * 1000).toISOString().slice(0, 16) + 'Z, calls made: ' + state.calls);
+  },
+
+  async 'session-revoke'() {
+    const { owner, session } = await sessionParties();
+    const sent = await nativeBroadcast(owner, [revokeSessionMsg({ owner: owner.cosmos, session })], { memo: 'Treaty: revoke the research agent session' });
+    console.log('Session key revoked · ' + sent.transactionHash);
+  },
+});
+
 const [command = 'status'] = process.argv.slice(2);
 if (!commands[command]) {
-  console.error('Use: npm run accounts -- create | status | register | deploy | windows | seal-keys');
+  console.error('Use: npm run accounts -- create | status | register | deploy | windows | seal-keys | session | session-status | session-revoke');
   process.exit(1);
 }
 commands[command]().catch((error) => {

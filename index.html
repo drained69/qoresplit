@@ -3,22 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fbf9f4">
+  <meta name="theme-color" content="#f6f7f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="Treaty: binding deals between AI agents, safe after Q-Day. Agents sign the terms with post-quantum keys, the contract holds the money, and owners set limits their agents cannot break. Live on QoreChain Diana.">
   <meta property="og:title" content="Treaty · Binding deals between AI agents">
   <meta property="og:description" content="Agents sign with post-quantum keys, the contract holds the money, owners set limits their agents cannot break.">
-  <meta property="og:image" content="/featured.png">
+  <meta property="og:image" content="https://treatyv1.vercel.app/featured.png">
+  <meta property="og:url" content="https://treatyv1.vercel.app/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://treatyv1.vercel.app/">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Martian+Mono:wght@400;500&family=Schibsted+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <title>Treaty · Binding deals between AI agents</title>
 </head>
 <body>
   <header class="top">
     <div class="shell top-inner">
       <a class="brand" href="#home" aria-label="Treaty home">
-        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#13271c"/><rect x="5.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#a6e36e"/><rect x="16.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#a6e36e"/><rect x="13.25" y="11.5" width="5.5" height="13.5" rx="2.75" fill="#fbf9f4"/></svg>
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect class="mark-tile" width="32" height="32" rx="7"/><rect class="mark-bar" x="5.5" y="7.5" width="10" height="5.5" rx="1.5"/><rect class="mark-bar" x="16.5" y="7.5" width="10" height="5.5" rx="1.5"/><rect class="mark-stem" x="13.25" y="11.5" width="5.5" height="13.5" rx="1.5"/></svg>
         Treaty
       </a>
       <nav aria-label="Site">
@@ -31,7 +37,7 @@
       </nav>
       <div class="top-actions">
         <span class="live-dot"><i></i>Live on Diana</span>
-        <button id="wallet" type="button" class="pill">Connect wallet</button>
+        <div class="wallet-wrap" id="wallet-wrap"><button id="wallet" type="button" class="wallet-btn connect">Connect wallet</button></div>
       </div>
     </div>
   </header>
@@ -43,13 +49,13 @@
     <div class="shell footer-grid">
       <div class="footer-about">
         <a class="brand light" href="#home" aria-label="Treaty home">
-          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#fbf9f4"/><rect x="5.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#7cc24a"/><rect x="16.5" y="7.5" width="10" height="5.5" rx="2.75" fill="#7cc24a"/><rect x="13.25" y="11.5" width="5.5" height="13.5" rx="2.75" fill="#13271c"/></svg>
+          <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect class="mark-tile" width="32" height="32" rx="7"/><rect class="mark-bar" x="5.5" y="7.5" width="10" height="5.5" rx="1.5"/><rect class="mark-bar" x="16.5" y="7.5" width="10" height="5.5" rx="1.5"/><rect class="mark-stem" x="13.25" y="11.5" width="5.5" height="13.5" rx="1.5"/></svg>
           Treaty
         </a>
         <p>Binding deals between AI agents, safe after Q-Day. Agents sign with post-quantum keys, the contract holds the money, and owners set limits their agents cannot break.</p>
       </div>
       <div><h4>Product</h4><a href="#home/how">How it works</a><a href="#live">The live deal</a><a href="#create">Make a treaty</a><a href="#earnings">Earnings</a><a href="#verify">Verify a receipt</a></div>
-      <div><h4>Proof</h4><a href="https://github.com/drained69/qoresplit" target="_blank" rel="noreferrer">Source code ↗</a><a href="https://github.com/drained69/qoresplit/blob/main/AUDIT.md" target="_blank" rel="noreferrer">Audit ↗</a><a href="https://github.com/drained69/qoresplit/tree/main/deployments" target="_blank" rel="noreferrer">Deployment records ↗</a><a href="https://github.com/drained69/qoresplit/blob/main/AI_USAGE.md" target="_blank" rel="noreferrer">How AI built it ↗</a></div>
+      <div><h4>Proof</h4><a href="https://github.com/drained69/treaty" target="_blank" rel="noreferrer">Source code ↗</a><a href="https://github.com/drained69/treaty/blob/main/AUDIT.md" target="_blank" rel="noreferrer">Audit ↗</a><a href="https://github.com/drained69/treaty/tree/main/deployments" target="_blank" rel="noreferrer">Deployment records ↗</a><a href="https://github.com/drained69/treaty/blob/main/AI_USAGE.md" target="_blank" rel="noreferrer">How AI built it ↗</a></div>
       <div><h4>On QoreChain</h4><a href="https://dashboard.qorechain.io/faucet" target="_blank" rel="noreferrer">Testnet faucet ↗</a><a href="https://docs.qorechain.io/developer-guide/evm-window-reference/" target="_blank" rel="noreferrer">EVM windows ↗</a><a href="https://explore.qore.network" target="_blank" rel="noreferrer">Explorer ↗</a><a href="https://build.qorechain.io" target="_blank" rel="noreferrer">Build Before Q-Day ↗</a></div>
     </div>
     <div class="shell footer-base"><span>© 2026 Treaty · MIT</span><span>Signed with ML-DSA-87 · settled on QoreChain Diana</span></div>
