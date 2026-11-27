@@ -40,6 +40,8 @@ export async function loadSigner(env = process.env) {
     privateKey: account.privateKey,
     publicKey: account.pqc.publicKey,
     sign: (messageHex) => bytesToHex(pqcSign(account.pqc.secretKey, hexToBytes(messageHex))),
+    /** The full hybrid account, for Native-lane transactions (for example relaying a smart-account call). */
+    unified: account,
   };
 }
 

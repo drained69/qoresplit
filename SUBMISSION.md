@@ -39,6 +39,21 @@ The demo prints an explorer link for every transaction and saves them all to `de
 - [ ] Commit and push `deployments/diana-demo.json`: `git add deployments && git commit -m "Live Diana run" && git push`
 - [ ] Put the Treaty contract address at the top of the README, replacing "*link added at submission*" with the address and the video link.
 
+### Act two: smart-account spending rules (about 10 minutes, do this one)
+
+The track asks for smart-account spending rules. This run puts them on Diana: Olivia links the research agent's session key to her own account under a QoreChain spending rule, the agent locks a budget straight from her account, the chain refuses what the rule does not allow, and she revokes the key.
+
+```sh
+git pull                        # get the smart-account code
+npm ci                          # installs @noble/curves, now a direct dependency
+npm run accounts -- status      # each account needs QOR; the owner needs about 7 QOR
+npm run accounts -- windows     # fresh windows for the agents (the old ones have expired)
+npm run demo:session            # act two, about 8 minutes
+```
+
+- [ ] Check the run printed `REFUSED` for the three attempts the chain should refuse, and `Done` at the end. If any line says `Unexpected`, send me the output before pushing.
+- [ ] Commit and push `deployments/diana-smart-account.json`: `git add deployments && git commit -m "Live smart-account run" && git push`. The live page then shows act two with every transaction.
+
 If a step fails, run `npm run accounts -- status`. Most problems are an account without QOR, an unregistered key, or a window that ran out (open new ones with `npm run accounts -- windows`). Ask in the fest Discord if Diana itself misbehaves.
 
 ## 4. The web app (optional, about 10 minutes)
@@ -66,7 +81,8 @@ Record the screen with your voice. Suggested script:
 | 1:45 | The attack lines | "An attacker steals the data agent's wallet key. It tries to withdraw and to deliver junk. Both blocked: every action needs the post-quantum key." |
 | 2:05 | Revoke and refund | "Olivia switches her agent off. It can't sign anything any more, and the unused budget goes back to her, not the agent." |
 | 2:25 | The treaty page in the web app, or the explorer | "Every agreement and payment also writes a receipt on QoreChain Native through the Cross-VM bridge, verifiable on both VMs. People can sign in the browser with QoreX, and see exactly what they approve." |
-| 2:45 | The requirements table in the README | "Scoped windows, on-chain spending rules, authenticated messages, all post-quantum. Treaty: binding deals between AI agents, safe after Q-Day." |
+| 2:30 | Act two on the live page | "And the chain itself enforces a second layer. Olivia's money stays in her own account; her agent holds only a session key she linked with QoreChain's smart-account module. It can call nothing but Treaty's fund and refund, within caps per call and per day. The chain refuses everything else, and one transaction from Olivia switches it off." |
+| 2:50 | The requirements table in the README | "Scoped windows, smart-account spending rules, authenticated messages, all post-quantum. Treaty: binding deals between AI agents, safe after Q-Day." |
 
 - [ ] Upload the video (YouTube unlisted or similar) and keep the link.
 
@@ -82,7 +98,8 @@ Record the screen with your voice. Suggested script:
 | Featured image | `assets/readme/featured.jpg` (1600×900 copy for link previews: `public/featured.png`) |
 | Video | your link |
 | Testnet addresses | the Treaty contract, and all five `qor1…` addresses from `npm run accounts -- status` (owner, research, data and cleaning agents, deployer) |
-| How it's made | "Solidity contract on Diana using pqcVerify and pqcKeyStatus for every signed action, the Cross-VM bridge for Native receipts, scoped EVM windows per agent, QoreSign message signing (QoreX in the browser, the SDK for agents). See README, AUDIT.md and AI_USAGE.md." |
+| How it's made | "Solidity contract on Diana using pqcVerify and pqcKeyStatus for every signed action, the Cross-VM bridge for Native receipts, scoped EVM windows per agent, smart-account spending rules (the owner links the agent's session key with QoreChain's abstractaccount module: only Treaty.fund and Treaty.refund, QOR caps per call and per day, revocable), hybrid Native transactions, and QoreSign message signing (QoreX in the browser, the SDK for agents). See README, AUDIT.md and AI_USAGE.md." |
+| Kits and features to tick | `@qorechain/sdk`, `@qorechain/evm`, `@qorechain/qoresign`; PQC precompiles (pqcVerify, pqcKeyStatus), EVM windows, agents / smart accounts (authenticators and spending rules), Cross-VM, QoreX message signing. Only tick what the checker can find: all of these are in the code and, after act two, on chain. |
 | Country / region | where most of the team lives (for the Regional Award) |
 | AI-native option | **tick it**: `AI_USAGE.md` is in the repository (Best AI-Native Build, $500) |
 
@@ -93,6 +110,7 @@ Record the screen with your voice. Suggested script:
 - [ ] Public repository with `LICENSE` (MIT), `README.md`, `AI_USAGE.md`
 - [ ] Featured image, video of 3 minutes or less
 - [x] `deployments/diana-demo.json` pushed; contract address and website in the README
+- [ ] Act two run and `deployments/diana-smart-account.json` pushed
 - [ ] Video link in the README
 - [ ] Every testnet address listed on the project page, and verified
 - [ ] Submitted before 2 December 23:59 UTC

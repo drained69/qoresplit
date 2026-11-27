@@ -2,6 +2,9 @@
 import demo from '../deployments/diana-demo.json';
 import deployment from '../deployments/diana.json';
 
+/** Act two, once it has run on Diana: the owner's money under QoreChain's own spending rules. */
+const actTwo = Object.values(import.meta.glob('../deployments/diana-smart-account.json', { eager: true, import: 'default' }))[0];
+
 /** Transaction links open Treaty's own page for it, read from Diana (the explorer needs its Testnet cookie). */
 const explorer = (hash) => '#tx/' + deployment.contract.address + '/' + hash;
 const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({
@@ -148,7 +151,7 @@ export function homeHtml() {
         <div><dt>Post-quantum checks</dt><dd><code>pqcKeyStatus</code> (0x…0a02) reads each signer's registered ML-DSA-87 key; <code>pqcVerify</code> (0x…0a01) verifies every signature, about 315k gas each.</dd></div>
         <div><dt>Message format</dt><dd>QoreSign message-signing-v1 with readable text, so QoreX shows people exactly what they sign and agents sign the same bytes.</dd></div>
         <div><dt>Cross-VM</dt><dd>Receipts through the bridge at 0x…0901 into the governance-approved Native receipt book (code 865).</dd></div>
-        <div><dt>Verification</dt><dd>17 contract and service tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 17 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
+        <div><dt>Verification</dt><dd>25 contract, service and smart-account tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 21 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
       </dl>
     </div>
   </section>
@@ -158,7 +161,7 @@ export function homeHtml() {
     <h2 class="big">What the <em>Post-Quantum AI Agents</em> track asks for.</h2>
     <div class="reqs">
       <div class="req"><h3>Scoped EVM window<small>Transaction, value, time, target</small></h3><p>Each agent opens its own window, signed with its post-quantum key: it can only call the Treaty contract, at most 30 transactions, a capped value, for about an hour. The chain refuses anything else.</p></div>
-      <div class="req"><h3>Spending rules on chain<small>Owner mandate</small></h3><p>Limits per deal, in total and in time, checked by the contract when the agent agrees and again when money is locked. An off switch, after which only the owner can move the agent's money.</p></div>
+      <div class="req"><h3>Smart-account spending rules<small>QoreChain abstractaccount · owner mandate</small></h3><p>Two layers. The owner links the agent's session key to her own account with QoreChain's smart-account module: the chain lets it call only <code>Treaty.fund</code> and <code>Treaty.refund</code>, caps each call and each day in QOR, and expires it; she revokes it in one transaction. Then Treaty's mandate caps each deal and the total, and its off switch stops the agent signing. Linking, changing and revoking all need the owner's ML-DSA-87 signature.</p></div>
       <div class="req"><h3>Authenticated messaging<small>QoreSign · ML-DSA-87</small></h3><p>Every message an agent sends (accept these terms, here is my work, I accept it, pay me) is a readable message signed with ML-DSA-87 and verified by the contract with QoreChain's <code>pqcVerify</code>.</p></div>
       <div class="req"><h3>Cross-VM receipts<small>EVM → Native, atomically</small></h3><p>Every agreement and payment also writes a receipt on QoreChain Native in the same transaction, through the governance-approved bridge. If either side fails, both are undone.</p></div>
     </div>
@@ -171,6 +174,7 @@ export function homeHtml() {
       ${faq('Who holds the money?', 'Nobody. The Treaty contract holds it, and its rules are public: pay per accepted job, release ignored jobs after the review period, return the rest after the deadline. There is no admin, no pause button and no upgrade.')}
       ${faq('What if the client agent never answers?', 'Each delivery has a review period. If the client neither accepts nor rejects in time, anyone can release the payment, so workers are never stuck waiting.')}
       ${faq('Can an owner stop a misbehaving agent?', 'Yes. The owner switches the agent off with one signature. From then on the agent cannot sign anything in Treaty, only the owner can withdraw its earnings, and unused budgets go back to the owner.')}
+      ${faq('Does the agent ever hold its owner\'s money?', 'No. The money stays in the owner\'s account until the moment a budget is locked. The agent holds a session key that the owner linked to her account with QoreChain\'s smart-account module; the chain lets that key call only Treaty.fund and Treaty.refund, within a per-call and a daily cap, until it expires or she revokes it. The agent\'s own account only relays and pays the fee. A stolen session key can lock budget only into deals the agent already signed with its post-quantum key, and unused budget always returns to the owner.')}
       ${faq('Do people need to run code?', 'No. People sign in this web app with the QoreX wallet and see exactly what they approve, in plain words. Agents use the Treaty SDK. Both produce the same signatures.')}
       ${faq('Is this live, or a mock-up?', 'Live. The contract is deployed on QoreChain\'s Diana testnet and the whole agents story ran there on 26 November 2026: 18 transactions, all linked on the live deal page. Test QOR has no monetary value; nothing on mainnet is involved.')}
       ${faq('What does it cost to use?', 'Only network fees. A signature check costs about 315,000 gas on Diana. Treaty takes no fee, and the contract has no owner who could add one.')}
@@ -243,6 +247,47 @@ const story = [
   ]],
 ];
 
+const NATIVE_EXPLORER = 'https://explore.qore.network/tx/';
+const actTwoStory = [
+  ['owner renews the agent’s mandate (relayed by the agent)', 'Olivia renews her agent’s mandate', 'At most 6 QOR, for 2 days. Both sign with ML-DSA-87 and the agent relays it, so Olivia sends no EVM transaction at all.', 'Treaty’s limit'],
+  ['owner links the session key with a spending rule', 'Olivia links the agent’s session key to her own account', 'One hybrid transaction on QoreChain Native (MsgUpdateSpendingRules + MsgRegisterAuthenticator): the key may call only Treaty.fund and Treaty.refund, at most 6 QOR per call and per day, for 24 hours.', 'QoreChain’s limit'],
+  ['the data agent signs the terms', 'The data agent signs a new deal', '"Label four image batches", 1.5 QOR each, up to 4: a 6 QOR budget.', 'Signed'],
+  ['the research agent signs: the treaty goes live', 'The research agent signs: the treaty is live', 'Within the renewed mandate. The terms are recorded on QoreChain Native.', 'Live'],
+  ['the agent locks 6 QOR from the owner’s account (session key, chain-checked)', 'The agent locks 6 QOR straight from Olivia’s account', 'Its session key signs a MsgExecuteEVM; its own account relays it and pays the fee. QoreChain checks the rule, then Treaty checks the mandate. The money never passes through the agent.', '6 QOR locked'],
+  ['session key tries an unlimited fUSD approval to the agent (refused by the chain)', 'The same key tries an unlimited token approval to itself', 'Not a call the rule allows.', 'Refused by QoreChain', 'refused'],
+  ['session key tries to send 1 QOR from the owner to the agent (refused by the chain)', 'It tries to move 1 QOR of Olivia’s money to itself', 'Outside the rule.', 'Refused by QoreChain', 'refused'],
+  ['the data agent delivers batch 1', 'Batch 1 is delivered', 'Only its fingerprint goes on chain.', 'Delivered'],
+  ['the research agent accepts it: 1.5 QOR paid', 'The research agent accepts it', '1.5 QOR to the data agent from the locked budget, with a receipt on Native.', '+1.5 QOR paid'],
+  ['owner revokes the session key', 'Olivia switches the session key off', 'One hybrid transaction, effective in the same block.', 'Revoked'],
+  ['the revoked key tries to call Treaty.refund (refused by the chain)', 'The revoked key tries again', 'Even an allowed function is refused now.', 'Refused by QoreChain', 'refused'],
+  ['the unused budget goes back to the owner', 'The deadline passes: 4.5 QOR goes back to Olivia', 'She locked it, so it returns to her. She paid for exactly one accepted batch.', '4.5 QOR → owner'],
+];
+
+function actTwoHtml() {
+  const intro = `<div class="intro" style="margin-top:72px"><p class="eyebrow">Act two · QoreChain smart account</p>
+    <h1 style="font-size:clamp(1.9rem,4vw,2.8rem)">The owner’s money, under <em>the chain’s own rules.</em></h1>
+    <p>Olivia keeps her money in her own account. Her agent can reach it only through a session key she linked with QoreChain’s smart-account module, and the chain checks every call before Treaty does.</p></div>`;
+  if (!actTwo?.steps?.length) {
+    return intro + `<div class="card"><p class="muted">The recorded run of act two appears here once it has run on Diana (<code>npm run demo:session</code>).</p></div>`;
+  }
+  const byStep = Object.fromEntries(actTwo.steps.map((entry) => [entry.step, entry]));
+  const events = actTwoStory.map(([key, title, text, tag, kind], i) => {
+    const step = byStep[key];
+    if (!step) return '';
+    const refusedAsExpected = kind === 'refused' && step.outcome === 'refused';
+    const unexpected = kind === 'refused' && step.outcome !== 'refused';
+    const detail = refusedAsExpected && step.reason ? text + ' Reason from the chain: ' + step.reason + '.' : text;
+    const link = step.tx ? `<a href="${explorer(step.tx)}">${shortHash(step.tx)} →</a>`
+      : /^[\dA-F]{64}$/.test(step.cosmosTx ?? '') ? `<a href="${NATIVE_EXPLORER + step.cosmosTx}" target="_blank" rel="noreferrer">${step.cosmosTx.slice(0, 10)}… ↗</a>` : 'refused before inclusion';
+    const meta = (step.block ? 'block ' + escape(step.block) : step.height && step.height !== '-' ? 'height ' + escape(step.height) : '') + '<br>' + link;
+    return `<article class="event ${unexpected ? 'neutral' : kind ?? ''}"><span class="dot">${refusedAsExpected ? '✕' : i + 1}</span>
+      <div><h3>${escape(title)}</h3><p>${escape(detail)}</p><span class="amount-tag">${escape(unexpected ? 'Not refused' : tag)}</span></div>
+      <div class="meta">${meta}</div></article>`;
+  }).join('');
+  return intro + `<div class="timeline">${events}</div>
+    <p class="small-note muted" style="margin-top:14px">Native transactions open in the QoreChain explorer: choose Testnet at the top of the explorer first. Treaty #${escape(actTwo.treaty ?? '')}, ${escape(actTwo.startedAt?.slice(0, 10) ?? '')}.</p>`;
+}
+
 export function liveHtml() {
   let n = 0;
   const phases = story.map(([phase, events]) => `<div class="phase">${escape(phase)}</div>` + events.map(([key, title, text, tag, kind]) => {
@@ -267,6 +312,7 @@ export function liveHtml() {
     </div>
     <div id="live-state"></div>
     <div class="timeline">${phases}</div>
+    ${actTwoHtml()}
   </div>`;
 }
 
