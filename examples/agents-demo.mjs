@@ -4,7 +4,7 @@
 //   npm run demo -- --serve    then keep the local chain running and open the web app on it
 //   npm run demo -- --diana    the same story on the real QoreChain Diana testnet (about 10 minutes),
 //                              with the accounts from `npm run accounts`; every transaction is saved
-//                              to deployments/diana-demo.json for the submission
+//                              to deployments/runs/treaty-<id>.json (one file per run)
 //
 // Locally, everything runs on the Diana stand-in (scripts/local-diana.mjs): a chain with ID 9800
 // whose ML-DSA-87 checks are backed by real ML-DSA-87 verification. On Diana, the chain's own
@@ -283,8 +283,12 @@ try {
     record.finishedAt = new Date().toISOString();
     record.explorer = 'https://explore.qore.network/tx/<cosmosTx> (choose Testnet at the top of the explorer first)';
     await mkdir(new URL('../deployments/', import.meta.url), { recursive: true });
-    await writeFile(new URL('../deployments/diana-demo.json', import.meta.url), JSON.stringify(record, null, 2) + '\n');
-    say('Saved every transaction to deployments/diana-demo.json. List these addresses on your project page:');
+    // Each run gets its own file, so later runs never replace the record the website and README cite
+    // (deployments/diana-demo.json, the first full run on Diana).
+    const file = 'deployments/runs/treaty-' + record.treaty + '.json';
+    await mkdir(new URL('../deployments/runs/', import.meta.url), { recursive: true });
+    await writeFile(new URL('../' + file, import.meta.url), JSON.stringify(record, null, 2) + '\n');
+    say('Saved every transaction to ' + file + '. List these addresses on your project page:');
     for (const [name, address] of Object.entries(record.parties)) say('  ' + name + ': ' + address);
   }
 

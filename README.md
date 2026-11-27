@@ -101,7 +101,7 @@ Every page reads Diana directly, with no database or indexer. The only server co
 | Deployed | Block 10,807,010, 4,688,260 gas, runtime code verified to match this repository's build ([explorer](https://explore.qore.network/tx/EB56CA60240D08C6FAAAAF6BE9E5C51DAB0262204443E0AF6348D5FFE60C37DB)) |
 | Website | [treatyv1.vercel.app](https://treatyv1.vercel.app) · [treaty #1](https://treatyv1.vercel.app/#agreement/0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6/1) |
 | Signing chain | `qorechain-diana` |
-| Records | [`deployments/diana.json`](deployments/diana.json) (contract, accounts, windows) and [`deployments/diana-demo.json`](deployments/diana-demo.json) (every transaction of the run) |
+| Records | [`deployments/diana.json`](deployments/diana.json) (contract, accounts, windows) and [`deployments/diana-demo.json`](deployments/diana-demo.json) (every transaction of the run); later full runs in [`deployments/runs/`](deployments/runs), such as [Treaty #7](deployments/runs/treaty-7.json) on 27 November |
 
 On 26 November 2026 the whole agents story ran on Diana from four separate accounts, each acting through its own scoped EVM window that allows only the Treaty contract. **All 18 transactions succeeded.** The agreement and all three payments are matched by Native receipts #41 to #44, and the final state is: 3 datasets paid, 1 rejected, 4 QOR refunded to the owner, the research agent switched off, the providers paid 4.8 and 1.2 QOR.
 
@@ -277,7 +277,7 @@ npm run accounts -- register    # register each account's ML-DSA-87 key
 npm run accounts -- deploy      # deploy Treaty (saves its address to .env.diana)
 npm run accounts -- windows     # open each party's scoped EVM window
 npm run accounts -- seal-keys   # optional: publish each agent's ML-KEM-1024 key in the KEM registry
-npm run demo -- --diana         # the agents demo on Diana; writes deployments/diana-demo.json
+npm run demo -- --diana         # the agents demo on Diana; writes deployments/runs/treaty-<id>.json
 npm run accounts -- status      # balances, keys and windows at any time
 npm run accounts -- session     # owner links the research agent's session key (QoreChain smart account)
 npm run accounts -- session-status   # what the chain enforces for it
