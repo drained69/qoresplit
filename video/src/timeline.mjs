@@ -36,7 +36,7 @@ export const CUE = {
   problemGone: 360,
   quantum: 400,
   quantumCrack: 455,
-  fixes: 530,
+  fixes: 545,
 
   // 1. mandate
   termIn: 612,
@@ -48,10 +48,10 @@ export const CUE = {
 
   // 2-4. deal
   dealPage: 1350,
-  sign1: 1470,
-  sign2: 1555,
-  sign3: 1640,
-  liveToast: 1650,
+  sign1: 1525,
+  sign2: 1590,
+  sign3: 1650,
+  liveToast: 1665,
   lockedTerm: 1760,
   locked: 1775,
   lockedToast: 1780,
@@ -88,9 +88,9 @@ export const CUE = {
   qorexApprove: 3870,
   switchedOff: 3880,
   notAuthorized: 3950,
-  refundPage: 3990,
+  refundPage: 3960,
   refund: 4040,
-  withdrawPage: 4170,
+  withdrawPage: 4160,
   withdrawData: 4200,
   withdrawCleaner: 4250,
 
@@ -113,12 +113,12 @@ export const CUE = {
 export const CAPTIONS = [
   { from: s(20), to: s(45), n: '01', label: 'The rules', head: 'Olivia puts her agent on a budget',
     line: 'At most 10 QOR per deal and 15 QOR in total, for 7 days. Both sign with ML-DSA-87.' },
-  { from: s(45), to: CUE.sign1 - 20, n: '02', label: 'The deal', head: 'The research agent proposes a deal',
-    line: '“Clean five survey datasets”: 2 QOR each, up to 5. Data agent 80%, cleaning agent 20%.' },
-  { from: CUE.sign1 - 20, to: CUE.lockedTerm - 10, n: '03', label: 'The deal', head: 'Every party signs the exact terms',
+  { from: s(45), to: CUE.sign1 - 10, n: '02', label: 'The deal', head: 'The research agent proposes a deal',
+    line: '“Clean five survey datasets”: 2 QOR each, up to 5.' },
+  { from: CUE.sign1 - 10, to: CUE.lockedTerm - 10, n: '03', label: 'The deal', head: 'Every party signs the exact terms',
     line: 'Each signature is ML-DSA-87. The contract checks every one on chain with pqcVerify.' },
   { from: CUE.lockedTerm - 10, to: s(65), n: '04', label: 'The deal', head: 'The research agent locks the budget',
-    line: '10 QOR now sits in the contract, where the data agents can see it before they start.' },
+    line: '10 QOR now sits in the contract, where the providers can see it.' },
   { from: s(65), to: s(80), n: '04', label: 'Owner’s limit', head: 'It tries to commit to a second 10 QOR deal',
     line: '20 QOR would break Olivia’s 15 QOR limit. Refused on chain: MandateLimitExceeded.' },
   { from: s(80), to: s(105), n: '05', label: 'The work', head: 'Work is delivered, checked and paid',
@@ -127,10 +127,10 @@ export const CAPTIONS = [
     line: 'Withdrawing or delivering junk needs the post-quantum key it doesn’t have. Refused: BadPqcSignature.', dark: true },
   { from: s(125), to: CUE.refundPage, n: '07', label: 'The off switch', head: 'Olivia switches her agent off',
     line: 'One post-quantum signature. Its next acceptance fails: AgentNotAuthorized.' },
-  { from: CUE.refundPage, to: CUE.withdrawPage, n: '08', label: 'The end', head: 'The deadline passes: the rest goes back',
-    line: '10 QOR locked, 6 QOR paid for three datasets. The unused 4 QOR goes to Olivia, not the agent.' },
-  { from: CUE.withdrawPage, to: s(145), n: '09', label: 'The end', head: 'The team withdraws with post-quantum keys',
-    line: 'Data agent 4.8 QOR, cleaning agent 1.2 QOR. Every QOR is accounted for.' },
+  { from: CUE.refundPage, to: CUE.withdrawPage, n: '08', label: 'The end', head: 'The deadline passes',
+    line: '6 QOR paid for three datasets. The unused 4 QOR goes to Olivia, not the agent.' },
+  { from: CUE.withdrawPage, to: s(145), n: '09', label: 'The end', head: 'Withdrawals need the post-quantum key',
+    line: 'Data agent 4.8 QOR, cleaning agent 1.2 QOR.' },
   { from: s(145), to: CUE.qorexScene, n: '✓', label: 'Live on Diana', head: 'This already happened, on the real testnet',
     line: 'Every agreement and payment also writes a receipt on QoreChain Native, through the Cross-VM bridge.' },
   { from: CUE.qorexScene, to: s(165), n: '✓', label: 'Readable signatures', head: 'People see exactly what they sign',
@@ -140,10 +140,10 @@ export const CAPTIONS = [
 // ------------------------------------------------------------------ voiceover subtitles (SUBMISSION.md §5)
 export const SUBTITLES = [
   [12, 130, 'AI agents are starting to pay each other.'],
-  [130, 285, 'Today that means trusting the other agent,'],
-  [285, 400, 'or giving a bot a key whose limits live in its own code.'],
-  [400, 528, 'And that money is exactly what a quantum computer would steal.'],
-  [528, 597, 'Treaty fixes both.'],
+  [130, 225, 'Today that means trusting the other agent,'],
+  [225, 395, 'or giving a bot a key whose limits live in its own code.'],
+  [395, 545, 'And that money is exactly what a quantum computer would steal.'],
+  [545, 598, 'Treaty fixes both.'],
   [606, 800, 'Every party here is a separate agent with its own post-quantum key on QoreChain.'],
   [800, 960, 'Olivia, a human, owns the research agent and sets its limits:'],
   [960, 1100, 'ten QOR per deal, fifteen in total.'],
@@ -164,6 +164,7 @@ export const SUBTITLES = [
   [3756, 3880, 'Olivia switches her agent off.'],
   [3880, 4000, 'It can’t sign anything any more,'],
   [4000, 4190, 'and the unused budget goes back to her, not the agent.'],
+  [4205, 4345, 'The team withdraws its pay with its own post-quantum keys.'],
   [4356, 4520, 'Every agreement and payment also writes a receipt on QoreChain Native'],
   [4520, 4670, 'through the Cross-VM bridge, verifiable on both VMs.'],
   [4680, 4800, 'People can sign in the browser with QoreX,'],
@@ -248,8 +249,8 @@ export const typedLength = (line, frame) => Math.max(0, Math.min(line.text.lengt
 
 /** When the terminal window is on screen (it slides in and out over the browser). */
 export const TERMINAL_SHOWN = [
-  [CUE.termIn, 900], [1355, 1478], [1700, 1830], [1990, 2240],
-  [2404, 2470], [3045, 3140], [CUE.offPage, 3830], [3925, 4010], [CUE.withdrawPage, 4345],
+  [CUE.termIn, 900], [1355, 1515], [1700, 1830], [1990, 2240],
+  [2404, 2470], [3045, 3140], [CUE.offPage, 3830], [3925, 3962], [CUE.withdrawPage, 4345],
 ];
 // The attack has its own terminal pane; the lines above for 3150-3750 appear there.
 

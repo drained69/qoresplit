@@ -19,7 +19,7 @@ export const Requirements: React.FC<{ f: number; vertical: boolean }> = ({ f, ve
   return (
     <div style={{ position: 'absolute', inset: 0, opacity: t, fontFamily: SANS, color: C.ink, padding: v ? '120px 60px 0' : '80px 110px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontFamily: MONO, fontSize: 22 * k, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.green }}>
-        <b style={{ fontWeight: 500, background: C.greenSoft, padding: '6px 12px', borderRadius: 10 }}>06</b>Built for the track</div>
+        <b style={{ fontWeight: 500, background: C.greenSoft, padding: '6px 12px', borderRadius: 10 }}>✓</b>Built for the track</div>
       <h2 style={{ margin: '22px 0 0', fontSize: v ? 66 : 62, lineHeight: 1.04, letterSpacing: '-0.045em', fontWeight: 600 }}>
         What the <span style={{ color: C.green }}>Post-Quantum AI Agents</span> track asks for.</h2>
       <div style={{ marginTop: v ? 40 : 34, background: C.card, border: `1px solid ${C.line}`, borderRadius: 26, overflow: 'hidden', boxShadow: '0 20px 60px #13271c12' }}>

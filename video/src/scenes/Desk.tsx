@@ -69,13 +69,13 @@ function segment(f: number, g: Geo): Seg {
     };
     // the signatures card is below the main card: scroll to it while signing, back up for the budget
     const scroll = v
-      ? keys(f, [[1440, 0], [1468, 330], [1700, 330], [1730, 0]])
-      : keys(f, [[1440, 0], [1468, 250], [1690, 250], [1725, 0]]);
+      ? keys(f, [[1490, 0], [1518, 330], [1700, 330], [1730, 0]])
+      : keys(f, [[1490, 0], [1518, 250], [1695, 250], [1728, 0]]);
     return {
       url: URL.treaty, scroll, page: <TreatyPage s={st} />,
       cam: v
-        ? [[1350, 0.5, 0.5, 1], [1440, 0.5, 0.5, 1], [1470, 0.5, 0.5, 1.06], [1690, 0.5, 0.5, 1.06], [1730, 0.5, 0.5, 1], [1770, 0.5, 0.5, 1], [1930, 0.5, 0.5, 1], [1950, 0.5, 0.5, 1]]
-        : [[1350, 0.5, 0.5, 1], [1440, 0.5, 0.5, 1], [1470, 0.33, 0.56, 1.3], [1690, 0.33, 0.56, 1.3], [1730, 0.5, 0.5, 1], [1770, 0.38, 0.45, 1.35], [1930, 0.38, 0.45, 1.4], [1950, 0.5, 0.5, 1]],
+        ? [[1350, 0.5, 0.5, 1], [1490, 0.5, 0.5, 1], [1520, 0.5, 0.5, 1.06], [1695, 0.5, 0.5, 1.06], [1730, 0.5, 0.5, 1], [1770, 0.5, 0.5, 1], [1930, 0.5, 0.5, 1], [1950, 0.5, 0.5, 1]]
+        : [[1350, 0.5, 0.5, 1], [1490, 0.5, 0.5, 1], [1520, 0.33, 0.56, 1.3], [1695, 0.33, 0.56, 1.3], [1730, 0.5, 0.5, 1], [1770, 0.38, 0.45, 1.35], [1930, 0.38, 0.45, 1.4], [1950, 0.5, 0.5, 1]],
     };
   }
   // ------------------------------------------------ the refused second treaty
@@ -127,6 +127,7 @@ function segment(f: number, g: Geo): Seg {
       </div>) : null;
     const st: TreatyState = { phase: 'locked', signed: 3, paid, waiting, deliveries: d, payments, hideSigners: true, hideBreakdown: true, wide: true, ledgerExtra: clock };
     return {
+      overlay: <Reenacted f={f} from={CUE.reviewOver} to={CUE.released + 45} scale={g.ui} />,
       url: URL.treaty, zoom: v ? 1.75 : 1.6, scroll: v ? keys(f, [[2400, 0], [2440, 760]]) : keys(f, [[2400, 0], [2436, 730]]), page: <TreatyPage s={st} />,
       cam: v
         ? [[2400, 0.5, 0.5, 1]]
@@ -142,11 +143,12 @@ function segment(f: number, g: Geo): Seg {
       page: <StatementPage who={ADDR.research} available="0 QOR" earned="0 QOR" withdrawn="0 QOR" withdrawals={0} payingFor switchedOff={off}
         mandate={{ off, committed: '10 QOR', flash: off ? 1 - ramp(f, CUE.switchedOff, CUE.switchedOff + 45) : 0,
           offButton: <span style={{ position: 'absolute', left: 180, top: 26 }}><Cursor f={f} arrive={CUE.offPage + 10} click={CUE.offClick} leave={CUE.offClick + 10} size={26} /></span> }} />,
-      overlay: sheet ? (
+      overlay: sheet ? (<>
+        <Reenacted f={f} from={CUE.qorexIn} to={CUE.switchedOff + 30} scale={g.ui} />
         <QorexSheet scale={g.ui} enter={window01(f, CUE.qorexIn, CUE.switchedOff + 30, 10)} approved={f >= CUE.qorexApprove + 6 ? 1 : 0}
-          text={'Treaty: owner switches off agent\n0x378c243566d8e545e3e32e8555de03403f66b998\ncontract 0xdfc61ec824205aef7f2fc80fad5dbc2cc987d0a6\nchain 9800'}
+          text={'Treaty: owner switches off agent\n0x378c243566d8e545e3e32e8555de03403f66b998\nchange #1\ncontract 0xdfc61ec824205aef7f2fc80fad5dbc2cc987d0a6\nchain 9800'}
           approve={<span style={{ position: 'absolute', left: '50%', top: '60%' }}><Cursor f={f} arrive={CUE.qorexIn + 14} click={CUE.qorexApprove} leave={CUE.qorexApprove + 16} fromX={-220} fromY={140} size={26} /></span>} />
-      ) : f >= CUE.notAuthorized - 2 ? (
+      </>) : f >= CUE.notAuthorized - 2 ? (
         <div style={{ position: 'absolute', left: 0, right: 0, top: v ? 380 : 300, display: 'flex', justifyContent: 'center' }}>
           <Refusal f={f} at={CUE.notAuthorized} title="Its next acceptance: refused" code="AgentNotAuthorized" scale={g.ui} until={CUE.refundPage} />
         </div>
@@ -255,6 +257,15 @@ const LimitMeter: React.FC<{ f: number; g: Geo }> = ({ f, g }) => {
         </div>
       </div>
     </div>
+  );
+};
+
+export const Reenacted: React.FC<{ f: number; from: number; to: number; scale?: number }> = ({ f, from, to, scale = 1 }) => {
+  const o = window01(f, from, to, 10);
+  if (o <= 0) return null;
+  return (
+    <div style={{ position: 'absolute', left: 16 * scale, bottom: 16 * scale, opacity: o, zIndex: 45, background: C.ink, color: '#cfe9bd', fontFamily: MONO, fontSize: 17 * scale,
+      letterSpacing: '0.04em', padding: `${8 * scale}px ${12 * scale}px`, borderRadius: 10 }}>Shown in the app · in the live run the SDK signed the same message</div>
   );
 };
 

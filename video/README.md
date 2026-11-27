@@ -16,6 +16,17 @@ Rendering uses the Chrome headless shell that is already installed (`/opt/pw-bro
 `REMOTION_CHROME` to use another) and Remotion's own ffmpeg. `out/` and the generated `.wav` files are
 git-ignored.
 
+## Voiceover (Higgsfield or any text-to-speech)
+
+```sh
+node scripts/voiceover.mjs script        # out/voiceover/VOICEOVER.md: every line, its cue, its slot, TTS-ready text
+node scripts/voiceover.mjs mix voice     # voice/01.wav, 02.wav, … → placed on their cues, music ducked 10 dB
+```
+
+The mix writes `out/treaty-demo-1920x1080-voiceover.mp4` and `out/treaty-demo-1080x1920-voiceover.mp4`
+(picture copied, not re-encoded) and reports any clip too long for its slot. See [AUDIT.md](AUDIT.md) for the
+step-by-step check of the video.
+
 ## Outputs (`out/`)
 
 | File | What |

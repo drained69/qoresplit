@@ -4,7 +4,7 @@ import { C, MONO, SANS, count, keys, pop, ramp, window01 } from '../lib';
 import { QorexSheet, TreatyPage, WORK, type TreatyState } from '../pages';
 import { CUE, s } from '../timeline.mjs';
 import demo from '../../../deployments/diana-demo.json';
-import type { Geo } from './Desk';
+import { Reenacted, type Geo } from './Desk';
 
 // The live page (story.js liveHtml): every step of the run, each linked to its transaction.
 const story: Array<[string | null, string, string, string, string?]> = [
@@ -113,6 +113,7 @@ export const Proof: React.FC<{ f: number; g: Geo }> = ({ f, g }) => {
           overlay={<>{!live && sheet && <QorexSheet scale={g.ui} enter={window01(f, CUE.qorexDemoSheet, CUE.qorexDemoVerified + 24, 10)} approved={f >= CUE.qorexDemoApprove + 6 ? 1 : 0}
             text={'Treaty: accept delivery 0 of treaty #1\nwork ' + WORK[0] + '\ncontract 0xdfc61ec824205aef7f2fc80fad5dbc2cc987d0a6\nchain 9800'}
             approve={<span style={{ position: 'absolute', left: '50%', top: '60%' }}><Cursor f={f} arrive={CUE.qorexDemoSheet + 30} click={CUE.qorexDemoApprove} leave={CUE.qorexDemoApprove + 14} fromX={-260} fromY={170} size={26} /></span>} />}
+            {!live && <Reenacted f={f} from={CUE.qorexScene + 10} to={s(165)} scale={g.ui} />}
             <Toasts f={f} scale={g.ui} /></>}>
           <AppHeader current={live ? 'live' : undefined} wallet={live ? undefined : '0x378C…b998'} />
           <div style={{ opacity: live ? 1 : ramp(f, CUE.qorexScene, CUE.qorexScene + 10) }}>{live ? <LivePage f={f} /> : <TreatyPage s={st} />}</div>
