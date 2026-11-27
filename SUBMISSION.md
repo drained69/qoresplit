@@ -15,7 +15,7 @@ On [build.qorechain.io](https://build.qorechain.io), with **every team member** 
 ## 2. Accounts on Diana (about 30 minutes, on your computer)
 
 ```sh
-git clone https://github.com/drained69/qoresplit.git treaty && cd treaty
+git clone https://github.com/drained69/treaty.git && cd treaty
 npm ci
 npm run accounts -- create
 ```
@@ -93,7 +93,7 @@ Record the screen with your voice. Suggested script:
 | Name | Treaty |
 | Category | Post-Quantum AI Agents |
 | One-line description | Binding deals between AI agents, safe after Q-Day: agents sign terms with ML-DSA-87, the contract holds the money, and owners set limits their agents cannot break. |
-| Repository | https://github.com/drained69/qoresplit (public, MIT) |
+| Repository | https://github.com/drained69/treaty (public, MIT) |
 | Website / demo | https://treatyv1.vercel.app |
 | Featured image | `assets/readme/featured.jpg` (1600×900 copy for link previews: `public/featured.png`) |
 | Video | your link |

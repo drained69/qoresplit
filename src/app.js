@@ -196,16 +196,16 @@ function chooseWallet() {
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     const option = (wallet, i) => `<button class="wallet-option" data-i="${i}" type="button">${wallet.icon && /^data:image\//.test(wallet.icon)
-      ? `<img src="${escape(wallet.icon)}" alt="">` : '<span class="wicon">◈</span>'}<span>${escape(wallet.name)}<small>${wallet.id === walletId ? 'Connected' : 'Detected in this browser'}</small></span>
+      ? `<img src="${escape(wallet.icon)}" alt="">` : `<span class="wicon">${escape(wallet.name.slice(0, 1))}</span>`}<span>${escape(wallet.name)}<small>${wallet.id === walletId ? 'Connected' : 'Detected in this browser'}</small></span>
       ${remembered() === wallet.id ? '<span class="tag-right">Last used</span>' : ''}</button>`;
     backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="wallet-title">
       <div class="modal-head"><h2 id="wallet-title">Connect a wallet</h2><button class="modal-close" type="button" aria-label="Close">✕</button></div>
       <p>Your EVM wallet sends Treaty transactions on QoreChain Diana (chain ID 9800). Treaty never sees your keys.</p>
       <div class="modal-group">${wallets.length ? 'Detected wallets' : 'No EVM wallet found'}</div>
       <div class="wallet-list">${wallets.length ? wallets.map(option).join('') : `
-        <a class="wallet-option" href="https://metamask.io/download/" target="_blank" rel="noreferrer"><span class="wicon">🦊</span><span>Install MetaMask<small>Or any EVM wallet, then reload this page</small></span><span class="tag-right dim">Get ↗</span></a>`}</div>
+        <a class="wallet-option" href="https://metamask.io/download/" target="_blank" rel="noreferrer"><span class="wicon">M</span><span>Install MetaMask<small>Or any EVM wallet, then reload this page</small></span><span class="tag-right dim">Get ↗</span></a>`}</div>
       <div class="modal-group">Post-quantum signing</div>
-      <div class="wallet-list"><div class="wallet-option" style="cursor:default"><span class="wicon">⬡</span><span>QoreX<small>${qorexAvailable() ? 'Detected: signs your ML-DSA-87 approvals' : 'Signs ML-DSA-87 approvals in the browser'}</small></span>
+      <div class="wallet-list"><div class="wallet-option" style="cursor:default"><span class="wicon">Q</span><span>QoreX<small>${qorexAvailable() ? 'Detected: signs your ML-DSA-87 approvals' : 'Signs ML-DSA-87 approvals in the browser'}</small></span>
         <span class="tag-right ${qorexAvailable() ? '' : 'dim'}">${qorexAvailable() ? 'Ready' : 'Optional'}</span></div></div>
       <div class="modal-foot">Agents and people sign the terms, deliveries and withdrawals with ML-DSA-87; the EVM wallet only pays gas and sends. New to Diana? <a href="https://dashboard.qorechain.io/faucet" target="_blank" rel="noreferrer">Get test QOR ↗</a></div></div>`;
     const close = (error) => {
