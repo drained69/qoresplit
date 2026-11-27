@@ -20,3 +20,17 @@ test('unsupported Native queries do not make upstream requests', async () => {
   assert.equal((await nativeRead(new Request('https://treaty.example/api/native/receipt/42'), fetch)).status, 404);
   assert.equal((await nativeRead(new Request('https://treaty.example/api/native/receipts/42', { method: 'POST' }), fetch)).status, 405);
 });
+
+test('an EVM transaction maps to the Cosmos hash the explorer lists', async () => {
+  const hash = '0x' + 'ab'.repeat(32);
+  const result = await nativeRead(new Request('https://treaty.example/api/native/evm-tx/' + hash), async (url) => {
+    assert.ok(url.startsWith(NATIVE_REST + '/cosmos/tx/v1beta1/txs?query='));
+    assert.equal(decodeURIComponent(url.split('query=')[1]), "ethereum_tx.ethereumTxHash='" + hash + "'");
+    return Response.json({ tx_responses: [{ txhash: 'ABC123', height: '42' }] });
+  });
+  assert.deepEqual(await result.json(), { cosmosTx: 'ABC123', height: '42' });
+  const missing = await nativeRead(new Request('https://treaty.example/api/native/evm-tx/' + hash), async () => Response.json({ tx_responses: [] }));
+  assert.equal(missing.status, 404);
+  const fetch = () => assert.fail('Unexpected upstream request');
+  assert.equal((await nativeRead(new Request('https://treaty.example/api/native/evm-tx/0x1234'), fetch)).status, 404);
+});

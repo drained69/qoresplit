@@ -383,3 +383,59 @@ export async function getRefundable(id) {
 export async function chainTime() {
   return (await client.getBlock()).timestamp;
 }
+
+/** The QoreChain explorer's (Cosmos) hash of an EVM transaction, or undefined if it cannot be found. */
+export async function cosmosHashOf(hash) {
+  try {
+    const response = await fetch('/api/native/evm-tx/' + hash, { signal: AbortSignal.timeout(10_000) });
+    return response.ok ? (await response.json()).cosmosTx : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read a transaction from Diana and explain what it did in Treaty: its status, block and
+ * time, each Treaty event, and the QoreChain Native receipt behind each agreement or payment.
+ */
+export async function describeTransaction(hash) {
+  await assertDeployment();
+  if (!/^0x[\da-f]{64}$/i.test(hash)) throw new Error('That is not a transaction hash.');
+  const receipt = await client.getTransactionReceipt({ hash }).catch(() => {
+    throw new Error('Diana has no transaction with this hash.');
+  });
+  const [block, transaction] = await Promise.all([
+    client.getBlock({ blockNumber: receipt.blockNumber }), client.getTransaction({ hash }),
+  ]);
+  const events = [];
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== address.toLowerCase()) continue;
+    let event;
+    try { event = decodeEventLog({ abi, ...log }); } catch { continue; }
+    const item = { name: event.eventName, args: event.args };
+    try {
+      if (event.eventName === 'Activated') {
+        Object.assign(item, await verifyAgreement(event.args.id, await getAgreement(event.args.id)));
+      } else if (event.eventName === 'Paid') {
+        const agreement = await getAgreement(event.args.id);
+        const delivery = await read('getDelivery', [event.args.id, event.args.unit]);
+        const commitment = deliveryCommitment({
+          chainId: chain.id, contract: address, id: event.args.id, unit: event.args.unit, deliverable: delivery.deliverable,
+          recipients: agreement.recipients, credits: event.args.credits,
+        });
+        Object.assign(item, commitment === event.args.commitment
+          ? await checkNativeReceipt(event.args.nativeReply, deliveryNote(commitment), receipt.blockNumber)
+          : { nativeError: 'The payment does not match its commitment.' });
+      } else if (event.eventName === 'Checkout') {
+        Object.assign(item, await verifyReceipt(hash).then(({ native, nativeError }) => ({ native, nativeError })));
+      }
+    } catch (error) {
+      item.nativeError = error?.message ?? 'Native verification failed.';
+    }
+    events.push(item);
+  }
+  return {
+    receipt, transaction, events, time: new Date(Number(block.timestamp) * 1000),
+    fee: receipt.gasUsed * receipt.effectiveGasPrice, isTreaty: receipt.to?.toLowerCase() === address.toLowerCase() || events.length > 0,
+  };
+}

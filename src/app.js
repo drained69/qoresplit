@@ -1,7 +1,7 @@
 import './style.css';
 import { formatEther } from 'viem';
 import {
-  address, chainTime, checkWindow, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
+  address, chainTime, checkWindow, cosmosHashOf, describeTransaction, getSigningChain, read, checkoutId, client, explainError, formatQor, getAgreement, getDeliveries, getEvent,
   getRefundable, getStatement, getUnitPayments, getWithdrawals, parsePrice, parseRequest, parseShare, pqcKeyStatus,
   requestWallet, selectWallet, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
 } from './chain.js';
@@ -35,7 +35,8 @@ const errorMessage = (error) => {
   const code = error?.walk?.((cause) => cause.code === 4001)?.code ?? error?.code;
   return code === 4001 ? 'Request cancelled in your wallet.' : explainError(error);
 };
-const explorerTx = (hash) => 'https://explore.qore.network/tx/' + hash;
+/** Every transaction link opens Treaty's own transaction page, read straight from Diana. */
+const explorerTx = (hash) => '#' + contractRoute('tx', hash);
 const linkURL = (fragment) => new URL('#' + fragment, location.href).href;
 const contractRoute = (route, value) => route + '/' + address + '/' + value;
 const validHash = (hash) => /^0x[\da-f]{64}$/i.test(hash ?? '');
@@ -269,8 +270,8 @@ const howItWorks = `<section class="card process"><h2>Why it holds</h2><ul>
   <li>${icon('4')}<span><strong>Owners keep agents on a leash</strong><small>Spending limits the contract enforces, and an off switch.</small></span></li>
 </ul></section>`;
 
-const intro = `<h1>Treaties between people and AI agents.<br><em>Nobody holds the money.</em></h1>
-  <p>Every party signs the terms with a post-quantum key. The contract holds the money and pays out only as agreed, so a stolen wallet key gets nothing, and an agent cannot spend past the limits its owner set.</p>`;
+const intro = `<p class="eyebrow">Make a treaty</p><h1>Set the terms. Everyone signs.</h1>
+  <p>Choose a service treaty to hire an agent, or a team of agents, for units of work, or a revenue share to split every payment. Nothing is binding until every party signs the exact terms with its post-quantum key, and the contract holds the money from then on.</p>`;
 
 async function createPage(previousId, revision) {
   let previous;
@@ -579,7 +580,7 @@ async function agreementPage(id, revision) {
       document.querySelector('#payments').innerHTML = '<h3>Payments</h3><ul class="history">' + payments.map((payment) =>
         `<li><span>Delivery ${payment.unit} · ${payment.how === 'Accepted' ? 'accepted' : 'released'}
         <small>${payment.native ? 'Verified on EVM and Native · receipt #' + escape(payment.native.id) : 'EVM confirmed · ' + escape(payment.nativeError)}</small></span>
-        <a href="${explorerTx(payment.hash)}" target="_blank" rel="noreferrer">View</a></li>`).join('') + '</ul>';
+        <a href="${explorerTx(payment.hash)}">View</a></li>`).join('') + '</ul>';
     }).catch(() => {});
   }
 }
@@ -753,7 +754,7 @@ async function statementPage(who, revision) {
     if (revision !== rendering) return;
     document.querySelector('#withdrawals').innerHTML = withdrawals.length
       ? '<ul class="history">' + withdrawals.reverse().map((item) => `<li><span>${formatQor(item.amount)} to <span title="${escape(item.to)}">${short(item.to)}</span>
-        <small>Withdrawal #${item.nonce} · block ${item.block}</small></span><a href="${explorerTx(item.hash)}" target="_blank" rel="noreferrer">View</a></li>`).join('') + '</ul>'
+        <small>Withdrawal #${item.nonce} · block ${item.block}</small></span><a href="${explorerTx(item.hash)}">View</a></li>`).join('') + '</ul>'
       : '<p class="muted">No withdrawals yet.</p>';
   }).catch(() => {
     if (revision !== rendering) return;
@@ -790,9 +791,59 @@ async function receiptPage(hash, revision) {
     <dl><dt>Payer</dt><dd>${escape(payment.payer)}</dd><dt>EVM block</dt><dd>${receipt.blockNumber}</dd><dt>Native receipt ID</dt><dd>${native ? escape(native.id) : 'Unverified'}</dd>
     <dt>Receipt commitment</dt><dd>${escape(payment.commitment)}</dd></dl>
     ${nativeError ? '<p class="muted">' + escape(nativeError) + '</p>' : ''}
-    <div class="actions"><a class="secondary" href="${explorerTx(hash)}" target="_blank" rel="noreferrer">View transaction</a>
+    <div class="actions"><a class="secondary" href="${explorerTx(hash)}">Transaction details</a>
     <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('receipt', hash)))}">Copy receipt link</button></div></section>
     ${splitCard(agreement, 'Shares credited', payment.credits)}</div>`;
+  bindCopy();
+}
+
+const eventText = {
+  Proposed: (a) => ['Treaty #' + a.id + ' proposed', 'The terms are on chain; every party must now sign them.'],
+  Signed: (a) => ['Treaty #' + a.id + ' signed by ' + short(a.signer), 'An ML-DSA-87 signature over the exact terms, checked with pqcVerify.'],
+  Activated: (a) => ['Treaty #' + a.id + ' is live', 'Every party has signed; the terms are recorded on QoreChain Native.'],
+  Superseded: (a) => ['Treaty #' + a.previous + ' replaced by #' + a.successor, 'Every old and new party signed the new version.'],
+  Cancelled: (a) => ['Treaty #' + a.id + ' cancelled', 'The proposal was withdrawn before it went live.'],
+  Checkout: (a) => [formatQor(a.total) + ' paid into treaty #' + a.id, 'Every share credited in this transaction, with a receipt on Native.'],
+  Funded: (a) => [formatQor(a.amount) + ' locked in treaty #' + a.id, 'The budget is held by the contract until work is paid or refunded.'],
+  Delivered: (a) => ['Delivery ' + a.unit + ' of treaty #' + a.id, 'By ' + short(a.provider) + ', signed with ML-DSA-87. Work hash ' + short(a.deliverable) + '.'],
+  Rejected: (a) => ['Delivery ' + a.unit + ' of treaty #' + a.id + ' rejected', 'The client rejected it within the review period; nothing was paid.'],
+  Paid: (a) => ['Delivery ' + a.unit + ' of treaty #' + a.id + ' paid', (a.how === 2 ? 'Accepted by the client. ' : 'Released after the review period. ') + 'Credited: ' + a.credits.map(formatQor).join(' + ') + '.'],
+  Refunded: (a) => [formatQor(a.amount) + ' returned from treaty #' + a.id, 'Unused budget after the deadline, sent to ' + short(a.to) + '.'],
+  MandateSet: (a) => ['Limits set for agent ' + short(a.agent), 'Owner ' + short(a.owner) + ': ' + formatQor(a.maxPerTreaty) + ' per treaty, ' + formatQor(a.maxTotal) + ' in total. Both signed with ML-DSA-87.'],
+  MandateRevoked: (a) => ['Agent ' + short(a.agent) + ' switched off', 'By its owner ' + short(a.owner) + '. Only the owner can move its money now.'],
+  Withdrawn: (a) => [formatQor(a.amount) + ' withdrawn', 'From the earnings of ' + short(a.recipient) + ' to ' + short(a.to) + ', signed with ML-DSA-87.'],
+};
+
+/** One transaction, read from Diana and explained. */
+async function txPage(hash, revision) {
+  if (!validHash(hash)) throw new Error('Invalid transaction hash.');
+  const [details, cosmosTx] = await Promise.all([describeTransaction(hash), cosmosHashOf(hash)]);
+  if (revision !== rendering) return;
+  const { receipt, transaction, events, time, fee } = details;
+  const ok = receipt.status === 'success';
+  const rows = events.map(({ name, args, native, nativeError }) => {
+    const [title, text] = eventText[name]?.(args) ?? [name, ''];
+    const nativeLine = native ? '<span class="amount-tag">Native receipt #' + escape(native.id) + ' verified</span>'
+      : nativeError ? '<span class="amount-tag warn-tag">Native: ' + escape(nativeError) + '</span>' : '';
+    return `<article class="event"><span class="dot">✓</span><div><h3>${escape(title)}</h3><p>${escape(text)}</p>${nativeLine}</div><div class="meta">${escape(name)}</div></article>`;
+  }).join('');
+  const explorerLink = cosmosTx ? 'https://explore.qore.network/tx/' + cosmosTx : undefined;
+  content.innerHTML = `<div class="intro"><p class="eyebrow">Transaction on QoreChain Diana</p><h1>${ok ? 'Confirmed' : 'Reverted'}${events.length ? ' · ' + escape(eventText[events.at(-1).name]?.(events.at(-1).args)[0] ?? events.at(-1).name) : ''}</h1>
+    <p>Read just now from Diana's EVM, and checked against QoreChain Native where the transaction wrote a receipt.</p></div>
+    <div class="layout"><div class="stack">
+      <section class="card"><div class="card-head"><h2>What happened</h2><span class="tag ${ok ? 'ok' : 'warn'}">${ok ? 'Success' : 'Reverted'}</span></div>
+        ${rows ? '<div class="timeline tx-events">' + rows + '</div>' : '<p class="muted">This transaction emitted no Treaty events.</p>'}</section>
+    </div>
+    <section class="card action"><h2>Details</h2>
+      <dl><dt>EVM hash</dt><dd>${escape(hash)}</dd><dt>Explorer (Cosmos) hash</dt><dd>${escape(cosmosTx ?? 'not found')}</dd>
+      <dt>Block</dt><dd>${receipt.blockNumber} · ${escape(time.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' }))}</dd>
+      <dt>From</dt><dd><a href="#${contractRoute('statement', transaction.from)}">${escape(transaction.from)}</a></dd>
+      <dt>To</dt><dd>${escape(receipt.to ?? receipt.contractAddress ?? '—')}</dd>
+      <dt>Gas used · fee</dt><dd>${receipt.gasUsed.toLocaleString('en-US')} · ${formatQor(fee)}</dd></dl>
+      ${explorerLink ? `<a class="secondary arrow" href="${explorerLink}" target="_blank" rel="noreferrer">Open in QoreChain Explorer</a>
+        <p class="muted small-note">The explorer opens on mainnet. Choose <strong>Testnet</strong> at the top of the explorer, then open this link again.</p>` : ''}
+      <button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('tx', hash)))}">Copy link to this page</button>
+    </section></div>`;
   bindCopy();
 }
 
@@ -833,7 +884,7 @@ async function render() {
   const [route, deployment, parameter, extra] = (location.hash.slice(1) || 'home').split('/');
   alert('');
   const section = route === 'home' ? (deployment === 'how' ? 'how' : '') :
-    ({ agreement: 'create', pay: 'create', service: 'create', statement: 'earnings', receipt: 'verify' }[route] ?? route);
+    ({ agreement: 'create', pay: 'create', service: 'create', statement: 'earnings', receipt: 'verify', tx: 'verify' }[route] ?? route);
   content.className = 'shell page';
   for (const link of document.querySelectorAll('[data-route]')) {
     if (link.dataset.route === section) link.setAttribute('aria-current', 'page');
@@ -847,7 +898,7 @@ async function render() {
     else if (route === 'verify') verifyPage();
     else if (route === 'earnings') earningsPage();
     else if (route === 'submit') submitPage();
-    else if (['create', 'agreement', 'pay', 'receipt', 'statement'].includes(route)) {
+    else if (['create', 'agreement', 'pay', 'receipt', 'statement', 'tx'].includes(route)) {
       if (extra !== undefined || !address || deployment?.toLowerCase() !== address.toLowerCase()) {
         throw new Error('This link requires its original Treaty Diana deployment.');
       }
@@ -856,6 +907,7 @@ async function render() {
       else if (route === 'agreement') await agreementPage(parameter, revision);
       else if (route === 'pay') await payPage(parameter, revision);
       else if (route === 'statement') await statementPage(parameter, revision);
+      else if (route === 'tx') await txPage(parameter ?? '', revision);
       else await receiptPage(parameter ?? '', revision);
     } else throw new Error('This page does not exist.');
     if (flash && revision === rendering) {
