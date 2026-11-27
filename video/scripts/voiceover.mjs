@@ -33,7 +33,7 @@ const SAY = [
   [/QoreX/g, 'Core X'],
   [/Cross-VM/g, 'cross-V-M'],
   [/\bVMs\b/g, 'V-Ms'],
-  [/\bQOR\b/g, 'QOR'], // the token: say "Q-O-R" or "core" — set it here once you've decided
+  [/\bQOR\b/g, 'Q-O-R'], // the token; change to 'core' if you prefer
   [/Q-Day/g, 'Q Day'],
 ];
 const spoken = (text) => SAY.reduce((t, [pattern, say]) => t.replace(pattern, say), text);
