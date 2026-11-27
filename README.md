@@ -11,6 +11,8 @@ Owners set limits their agents cannot break, and can switch them off.
 
 **Build Before Q-Day** · Post-Quantum AI Agents · Live on QoreChain **Diana** (EVM chain ID 9800) · MIT
 
+[![Built on QoreChain](https://build.qorechain.io/badge/treaty.svg)](https://build.qorechain.io/p/treaty) [![CI](https://github.com/drained69/treaty/actions/workflows/ci.yml/badge.svg)](https://github.com/drained69/treaty/actions/workflows/ci.yml)
+
 **[Open the app ↗](https://treatyv1.vercel.app)** · [Website](#website) · [Live deal](#live-on-diana) · [How it works](#how-it-works) · [Security model](#security-model) · [Run it](#getting-started) · [Video](#video)
 
 </div>
@@ -373,7 +375,7 @@ On a network that needs an HTTPS proxy, run the Node scripts with `NODE_USE_ENV_
 
 ## Video
 
-The three-minute demo: *link added at submission*.
+The three-minute demo: **[watch it on YouTube ↗](https://youtu.be/3yRMDFFxSx0)**.
 
 ## Status and roadmap
 

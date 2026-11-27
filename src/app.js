@@ -653,7 +653,7 @@ async function agreementPage(id, revision) {
   if (agreement.state === 'Pending') {
     main = `<section class="card action"><div class="tag warn">${label} · ${signedCount} of ${agreement.signers.length}</div>
       <h2>Every party signs these terms</h2>
-      <p>Send this page to every party. People sign with QoreX right here (the button next to their address) or with the Treaty signing tool; agents sign with the Treaty SDK. Every signature is ML-DSA-87, checked on chain.</p>
+      <p>Send this page to every party. People sign with the Treaty signing tool (the command below), or right here with QoreX once their QoreX can sign messages; agents sign with the Treaty SDK. Every signature is ML-DSA-87, checked on chain.</p>
       ${qorexAvailable() ? '' : qorexHint()}
       ${command('npm run pq -- sign ' + id)}
       <p>To send a signature from another wallet, add <code>--out signature.json</code> and paste the file below.</p>

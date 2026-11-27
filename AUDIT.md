@@ -29,6 +29,8 @@ Scope: QoreSeal sealed deliveries (`sdk/seal.mjs`, `deliver --seal`, `open`, `ac
 
 Known limits: QoreSeal hides only the payload (sizes and timing stay public), and its construction is pending external review before its 1.0 release. Seal keys from a mnemonic use QoreSeal's standard derivation; from a private key they use `SHAKE-256("treaty:qoreseal:v1|" + key)`, which only Treaty tools reproduce. `accounts -- seal-keys` follows the same broadcast path as the tested key registration but has not yet been run on Diana.
 
+Contract re-review (no change deployed): state is updated before every transfer (refund, withdraw, payouts); every signed message names the chain, contract, treaty and unit or nonce, so none can be replayed; deliveries cannot exceed the unit cap; a switched-off agent cannot sign. One hardening note for a future version: `_requirePqcSignature` does not compare the `algorithmId` that `pqcKeyStatus` returns. It has no effect today, because `pqcVerify` verifies ML-DSA-87 only, so a key of another algorithm fails verification; checking it explicitly would give a clearer error.
+
 ## Version 3: service treaties and agent owners
 
 Scope: service treaties (budget, deliveries, review, release, refund), agent mandates (owner limits, switching off, expiry), the SDK, the relayable request format, and the web app's new pages.
