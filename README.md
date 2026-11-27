@@ -15,7 +15,7 @@ Owners set limits their agents cannot break, and can switch them off.
 
 </div>
 
-![Treaty: binding deals between AI agents](assets/featured.png)
+![Treaty: binding deals between AI agents, safe after Q-Day](assets/readme/featured.png)
 
 ## Contents
 
@@ -72,11 +72,22 @@ On top of that, the keys guarding this money (secp256k1) are exactly what a larg
 The Treaty website explains the product, replays the live deal step by step, shows every transaction read directly from Diana, and runs the full app: proposing treaties, signing with QoreX, locking budgets, delivering, reviewing, withdrawing and verifying receipts.
 
 - **Website:** *link added after the Vercel deployment*
+<table>
+<tr><td width="50%"><img src="assets/readme/site-home.png" alt="Treaty home page"></td><td width="50%"><img src="assets/readme/site-live.png" alt="The live deal on Diana"></td></tr>
+<tr><td><b>Home.</b> What Treaty is, how it works, the security model and the track requirements.</td><td><b>Live deal.</b> The 18-step run on Diana, each step linked to its transaction.</td></tr>
+<tr><td width="50%"><img src="assets/readme/site-treaty.png" alt="Treaty #1 read live from Diana"></td><td width="50%"><img src="assets/readme/site-transaction.png" alt="A transaction explained and verified"></td></tr>
+<tr><td><b>A treaty.</b> Terms, budget, deliveries, signatures and the Native receipt, read live from Diana.</td><td><b>A transaction.</b> Explained in plain words, with its Native receipt verified and both hashes.</td></tr>
+<tr><td width="50%"><img src="assets/readme/site-make.png" alt="Make a treaty form"></td><td width="50%"><img src="assets/readme/site-earnings.png" alt="An agent statement with earnings and limits"></td></tr>
+<tr><td><b>Make a treaty.</b> Propose a service treaty or a revenue share; every party signs with QoreX.</td><td><b>Earnings.</b> What any person or agent earned, withdrew and can withdraw, and the limits its owner set.</td></tr>
+</table>
+
+Every page reads Diana directly, with no database or indexer. The only server code is a read-only proxy for QoreChain Native REST ([`api/native.js`](api/native.js)).
+
 - Pages: `#home` (overview), `#live` (the live deal), `#service` and `#create` (make a treaty), `#agreement/<contract>/<id>` (a treaty), `#statement/<contract>/<address>` (earnings and owner limits), `#tx/<contract>/<hash>` (any transaction, explained and verified).
 
 ## Live on Diana
 
-| | |
+| Deployment | |
 | --- | --- |
 | Treaty contract | `0xDfc61ec824205AEF7f2FC80FaD5DBC2Cc987D0a6` |
 | Deployed | Block 10,807,010, 4,688,260 gas, runtime code verified to match this repository's build ([explorer](https://explore.qore.network/tx/EB56CA60240D08C6FAAAAF6BE9E5C51DAB0262204443E0AF6348D5FFE60C37DB)) |
@@ -112,44 +123,13 @@ The attacks were also run against Diana, as simulated calls that spend nothing: 
 
 ## How it works
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Owner as Owner (human)
-    participant R as Research agent (client)
-    participant T as Treaty contract
-    participant D as Data agent (provider 80%)
-    participant N as QoreChain Native
-    Owner->>T: setMandate (owner + agent sign, ML-DSA-87): 10 per treaty, 15 total, 7 days
-    R->>T: proposeService: 2 QOR per dataset, up to 5
-    D->>T: sign terms (ML-DSA-87)
-    R->>T: sign terms (ML-DSA-87, within the owner's limits)
-    T->>N: terms receipt (same transaction)
-    R->>T: fund: lock 10 QOR
-    D->>T: deliver (hash of the work, ML-DSA-87)
-    R->>T: accept (ML-DSA-87)
-    T->>N: payment receipt (same transaction)
-    T-->>D: credit 1.6 QOR (cleaner 0.4)
-    Note over R,T: An ignored delivery: anyone may release it after the review period
-    Owner->>T: revokeMandate: the agent can no longer sign
-    Note over T: After the deadline: refund the unused budget to the owner
-    D->>T: withdraw (ML-DSA-87)
-```
+<p align="center"><img src="assets/readme/how-it-works.png" alt="Sequence of one service treaty: the owner sets limits, the agents sign the terms with ML-DSA-87, the client locks the budget, the provider delivers, the client accepts and the contract pays and writes a Native receipt" width="100%"></p>
 
 A service treaty moves through these states:
 
-```mermaid
-stateDiagram-v2
-    [*] --> Pending: proposeService
-    Pending --> Cancelled: cancel (proposer or a signer)
-    Pending --> Active: last signature
-    Active --> Funded: fund (client or its owner)
-    Funded --> Funded: deliver / accept / reject / release
-    Funded --> Settled: deadline passed, refund
-    Settled --> [*]
-```
+<p align="center"><img src="assets/readme/lifecycle.png" alt="States of a service treaty: Pending, Active, Funded, Settled or Cancelled" width="100%"></p>
 
-Each delivery is `Pending` until the client `accept`s it (paid), `reject`s it within the review period (not paid; the unit can be delivered again), or anyone `release`s it after the review period (paid).
+Each delivery waits for review. The client can accept it, and it is paid; reject it within the review period, and it is not paid (the unit can be delivered again); or say nothing, and after the review period anyone can release it, and it is paid.
 
 ## How Treaty meets the Post-Quantum AI Agents track
 
@@ -164,27 +144,7 @@ Treaty also uses the **Cross-VM** bridge (atomic EVM-to-Native receipts) and **Q
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    subgraph People and agents
-      A1[Agents<br/>sdk/treaty.mjs]
-      P1[People<br/>web app + QoreX]
-      CLI[Signing tool<br/>npm run pq]
-    end
-    subgraph QoreChain Diana
-      T[Treaty.sol<br/>EVM]
-      V[pqcVerify 0x…0a01]
-      K[pqcKeyStatus 0x…0a02]
-      B[Cross-VM bridge 0x…0901]
-      R[Native receipt book<br/>governance-pinned, code 865]
-    end
-    A1 -- ML-DSA-87 signed calls --> T
-    P1 -- QoreX signature, any EVM wallet sends --> T
-    CLI -- ML-DSA-87 signed calls --> T
-    T --> K
-    T --> V
-    T -- receipts, same transaction --> B --> R
-```
+<p align="center"><img src="assets/readme/architecture.png" alt="Architecture: agents, people and the signing tool call Treaty.sol on Diana, which uses pqcKeyStatus, pqcVerify and the Cross-VM bridge to the Native receipt book" width="100%"></p>
 
 | Path | What it is |
 | --- | --- |

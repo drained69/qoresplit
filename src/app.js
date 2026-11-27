@@ -133,7 +133,7 @@ function splitCard(terms, heading = 'Payment breakdown', exactCredits, note = ''
   const credits = exactCredits ?? splitAmounts(price, shares);
   const rows = recipients.map((recipient, i) =>
     '<li><span class="swatch c' + i + '"></span><span title="' + escape(recipient) + '">' +
-    escape(recipient) + '<small>' + shareLabel(shares[i]) +
+    escape(/^0x[\da-fA-F]{40}$/.test(recipient) ? short(recipient) : recipient) + '<small>' + shareLabel(shares[i]) +
     '</small></span><strong>' + formatQor(credits[i]) + '</strong></li>'
   ).join('');
   return '<section class="card breakdown"><div class="card-head"><h2>' + heading +
@@ -884,7 +884,7 @@ async function render() {
   const [route, deployment, parameter, extra] = (location.hash.slice(1) || 'home').split('/');
   alert('');
   const section = route === 'home' ? (deployment === 'how' ? 'how' : '') :
-    ({ agreement: 'create', pay: 'create', service: 'create', statement: 'earnings', receipt: 'verify', tx: 'verify' }[route] ?? route);
+    ({ agreement: '', pay: '', tx: '', service: 'create', statement: 'earnings', receipt: 'verify' }[route] ?? route);
   content.className = 'shell page';
   for (const link of document.querySelectorAll('[data-route]')) {
     if (link.dataset.route === section) link.setAttribute('aria-current', 'page');
