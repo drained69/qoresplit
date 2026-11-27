@@ -26,53 +26,51 @@ export function homeHtml() {
   return `
   <section class="hero">
     <div class="shell hero-inner">
-      <div>
-        <span class="kicker"><i></i>Live on QoreChain Diana · Build Before Q-Day</span>
-        <h1>Binding deals between AI agents. <em>Safe after Q-Day.</em></h1>
-        <p class="lead">AI agents are starting to hire and pay each other. Treaty lets them agree on terms, signed with post-quantum keys, while a contract holds the money and pays only as agreed. Owners set limits their agents cannot break, and can switch them off.</p>
+      <div class="hero-copy">
+        <p class="kicker">Post-Quantum AI Agents · live on QoreChain Diana</p>
+        <h1>Binding deals between AI agents, <em>safe after Q&#8209;Day.</em></h1>
+        <p class="lead">AI agents are starting to hire and pay each other. With Treaty they agree on terms signed with post-quantum keys, a contract holds the money and pays only as agreed, and owners set limits their agents cannot break.</p>
         <div class="cta">
-          <a class="pill light-btn arrow" href="#live">See a real deal on Diana</a>
-          <a class="ghost arrow" href="#home/how">How it works</a>
+          <a class="primary arrow" href="#live">See the deal on Diana</a>
+          <a class="secondary" href="#home/how">How it works</a>
         </div>
-        <div class="chips"><span class="chip">ML-DSA-87 signatures</span><span class="chip">Money held by the contract</span><span class="chip">Owner limits &amp; off switch</span><span class="chip">Stolen key gets nothing</span></div>
+        <p class="hero-facts"><span><b>${demo.steps.length}</b> transactions on Diana</span><span><b>4</b> receipts on QoreChain Native</span><span><b>0</b> failed</span></p>
       </div>
-      <div class="doc-wrap">
-      <div class="doc" aria-label="An example treaty">
-        <div class="doc-head"><strong>Treaty #1 · Clean five datasets</strong><span>DIANA</span></div>
-        <dl class="doc-rows">
-          <div><dt>Client</dt><dd>Research agent</dd></div>
-          <div><dt>Providers</dt><dd>Data agent 80% · Cleaner 20%</dd></div>
-          <div><dt>Price</dt><dd>2 QOR per dataset, up to 5</dd></div>
-          <div><dt>Budget</dt><dd>10 QOR locked in the contract</dd></div>
-          <div><dt>Owner limits</dt><dd>10 per deal · 15 total · 7 days</dd></div>
+      <figure class="instrument" aria-label="Treaty number 1, as recorded on Diana">
+        <header><span>Treaty No. 1</span><span>Service · qorechain-diana</span></header>
+        <h2>Clean five survey datasets</h2>
+        <dl class="clauses">
+          <div><dt>Price</dt><dd>2 QOR per dataset, at most 5</dd></div>
+          <div><dt>Split</dt><dd>Data agent 80% · Cleaning agent 20%</dd></div>
+          <div><dt>Budget</dt><dd>10 QOR, held by the contract</dd></div>
+          <div><dt>Review</dt><dd>60 seconds, then anyone may release</dd></div>
+          <div><dt>Owner's limit</dt><dd>10 QOR a deal, 15 in total, 7 days</dd></div>
         </dl>
-        <div class="seals">
-          <div class="seal"><b>✓</b>Data agent<small>ML-DSA-87</small></div>
-          <div class="seal"><b>✓</b>Cleaning agent<small>ML-DSA-87</small></div>
-          <div class="seal"><b>✓</b>Research agent<small>ML-DSA-87</small></div>
+        <p class="sig-head">Signed by</p>
+        <div class="signatories">
+          ${signatory('Data agent', 'Provider', 'Data agent signs the terms')}
+          ${signatory('Cleaning agent', 'Provider', 'Cleaning agent signs the terms')}
+          ${signatory('Research agent', 'Client', 'Research agent signs the terms')}
         </div>
-        <span class="doc-stamp">3 paid · 4 QOR refunded</span>
-      </div>
-      <div class="attack"><b>Stolen key · blocked</b>Withdrawing without the post-quantum key: refused on chain.</div>
-      </div>
+        <footer><span>Settled</span>3 datasets paid · 1 rejected · 4 QOR back to the owner</footer>
+      </figure>
     </div>
-    <div class="shell hero-foot"><span>Every signature post-quantum · Every payment on chain</span><span>${demo.steps.length} live transactions · 0 failed</span></div>
   </section>
 
   <section class="section shell" id="what">
-    <span class="label"><b>01</b>What Treaty is</span>
+    <span class="label">What Treaty is</span>
     <h2 class="big">A contract that agents can trust, <em>so they don't have to trust each other.</em></h2>
     <p class="sub">Today, an agent that pays another agent either trusts it, or trusts whoever holds the money. And a bot's spending limits usually live in its own code: one bug or stolen key and they are gone. Treaty moves the deal, the money and the limits onto the chain.</p>
     <div class="features">
-      <article class="feature"><span class="icon">✍︎</span><h3>Everyone signs the terms</h3><p>Every agent and person accepts the exact deal with its ML-DSA-87 post-quantum key. The chain checks each signature. Nobody is committed without signing.</p></article>
-      <article class="feature"><span class="icon">⛁</span><h3>The contract holds the money</h3><p>The client locks the budget first, so workers know it's there. It's paid out per accepted job, and what's left goes back after the deadline.</p></article>
-      <article class="feature"><span class="icon">⛨</span><h3>A stolen key gets nothing</h3><p>Ordinary wallet keys are what a quantum computer breaks. Every action that moves money needs the post-quantum key too, so a stolen classical key can't do anything.</p></article>
-      <article class="feature"><span class="icon">⏻</span><h3>Owners keep control</h3><p>A human owner sets how much an agent may commit, in total and per deal, and for how long. One signature switches the agent off; its money then answers only to the owner.</p></article>
+      <article class="feature"><h3>Everyone signs the terms</h3><p>Every agent and person accepts the exact deal with its ML-DSA-87 post-quantum key. The chain checks each signature. Nobody is committed without signing.</p></article>
+      <article class="feature"><h3>The contract holds the money</h3><p>The client locks the budget first, so workers know it's there. It's paid out per accepted job, and what's left goes back after the deadline.</p></article>
+      <article class="feature"><h3>A stolen key gets nothing</h3><p>Ordinary wallet keys are what a quantum computer breaks. Every action that moves money needs the post-quantum key too, so a stolen classical key can't do anything.</p></article>
+      <article class="feature"><h3>Owners keep control</h3><p>A human owner sets how much an agent may commit, in total and per deal, and for how long. One signature switches the agent off; its money then answers only to the owner.</p></article>
     </div>
   </section>
 
   <section class="section shell" id="how">
-    <span class="label"><b>02</b>How it works</span>
+    <span class="label">How it works</span>
     <h2 class="big">Four steps, <em>all enforced on chain.</em></h2>
     <div class="steps">
       ${stepHtml('01', 'The owner sets the limits.', 'Before the agent can spend anything.', 'Olivia lets her research agent commit <b>at most 10 QOR per deal and 15 QOR in total, for 7 days</b>. Both sign. If the agent tries to go further, the contract refuses.',
@@ -96,7 +94,7 @@ export function homeHtml() {
   </section>
 
   <section class="section shell" id="proof">
-    <span class="label"><b>03</b>Live on Diana</span>
+    <span class="label">Live on Diana</span>
     <h2 class="big">This already happened, <em>on the real testnet.</em></h2>
     <p class="sub">On ${liveFacts.date}, four separate accounts ran the whole story above on QoreChain's Diana testnet. Each acted through its own EVM window that allows only the Treaty contract.</p>
     <div class="proof">
@@ -117,7 +115,7 @@ export function homeHtml() {
   </section>
 
   <section class="section shell" id="security">
-    <span class="label"><b>04</b>Security model</span>
+    <span class="label">Security model</span>
     <h2 class="big">Every way it could go wrong, <em>and what stops it.</em></h2>
     <p class="sub">Treaty has no administrator, no pause switch and no upgrade path. Its guarantees come from the contract and from QoreChain's post-quantum precompiles alone.</p>
     <div class="threats">
@@ -131,7 +129,7 @@ export function homeHtml() {
   </section>
 
   <section class="section shell" id="developers">
-    <span class="label"><b>05</b>For developers</span>
+    <span class="label">For developers</span>
     <h2 class="big">An agent signs a treaty <em>in a few lines.</em></h2>
     <div class="dev">
       <pre class="code"><span class="cm">// Each agent runs with its own keys; nothing is shared.</span>
@@ -147,17 +145,17 @@ export function homeHtml() {
 <span class="kw">await</span> agent.fund(id);        <span class="cm">// locks 10 QOR, within the owner's limits</span>
 <span class="kw">await</span> agent.accept(id, <span class="nu">0</span>);   <span class="cm">// pays one unit, split 80/20</span></pre>
       <dl class="spec">
-        <div><dt>Contract</dt><dd>Solidity 0.8, ${Math.round(21179 / 1024)} KB, no owner or upgrade path. <a href="https://github.com/drained69/qoresplit/blob/main/contracts/Treaty.sol" target="_blank" rel="noreferrer">Treaty.sol ↗</a></dd></div>
+        <div><dt>Contract</dt><dd>Solidity 0.8, ${Math.round(21179 / 1024)} KB, no owner or upgrade path. <a href="https://github.com/drained69/treaty/blob/main/contracts/Treaty.sol" target="_blank" rel="noreferrer">Treaty.sol ↗</a></dd></div>
         <div><dt>Post-quantum checks</dt><dd><code>pqcKeyStatus</code> (0x…0a02) reads each signer's registered ML-DSA-87 key; <code>pqcVerify</code> (0x…0a01) verifies every signature, about 315k gas each.</dd></div>
         <div><dt>Message format</dt><dd>QoreSign message-signing-v1 with readable text, so QoreX shows people exactly what they sign and agents sign the same bytes.</dd></div>
         <div><dt>Cross-VM</dt><dd>Receipts through the bridge at 0x…0901 into the governance-approved Native receipt book (code 865).</dd></div>
-        <div><dt>Verification</dt><dd>25 contract, service and smart-account tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 21 read-only checks against Diana. <a href="https://github.com/drained69/qoresplit#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
+        <div><dt>Verification</dt><dd>25 contract, service and smart-account tests, 6 end-to-end tests (real ML-DSA-87 keys, a real browser, QoreX signing) and 21 read-only checks against Diana. <a href="https://github.com/drained69/treaty#verification" target="_blank" rel="noreferrer">How to run them ↗</a></dd></div>
       </dl>
     </div>
   </section>
 
   <section class="section shell" id="track">
-    <span class="label"><b>06</b>Built for the track</span>
+    <span class="label">Built for the track</span>
     <h2 class="big">What the <em>Post-Quantum AI Agents</em> track asks for.</h2>
     <div class="reqs">
       <div class="req"><h3>Scoped EVM window<small>Transaction, value, time, target</small></h3><p>Each agent opens its own window, signed with its post-quantum key: it can only call the Treaty contract, at most 30 transactions, a capped value, for about an hour. The chain refuses anything else.</p></div>
@@ -168,7 +166,7 @@ export function homeHtml() {
   </section>
 
   <section class="section shell faq" id="questions">
-    <div><span class="label"><b>07</b>Questions</span><h2 class="big" style="font-size:clamp(1.8rem,3.4vw,2.6rem)">The short answers.</h2></div>
+    <div><span class="label">Questions</span><h2 class="big" style="font-size:clamp(1.8rem,3.4vw,2.6rem)">The short answers.</h2></div>
     <div>
       ${faq('What is a "post-quantum" key, and why does it matter?', 'Ordinary crypto wallets use keys that a large quantum computer is expected to break. QoreChain gives every account a second key, ML-DSA-87, designed to resist that. Treaty asks for that key for everything that moves money, so even a broken or stolen ordinary key gets nothing.')}
       ${faq('Who holds the money?', 'Nobody. The Treaty contract holds it, and its rules are public: pay per accepted job, release ignored jobs after the review period, return the rest after the deadline. There is no admin, no pause button and no upgrade.')}
@@ -184,21 +182,28 @@ export function homeHtml() {
 
   <section class="start" id="start">
     <div class="shell">
-      <span class="label"><b>08</b>Start here</span>
+      <span class="label">Start here</span>
       <h2>Make your agents sign before they spend.</h2>
       <p>Propose a treaty in the app, watch the live deal from Diana, or run the whole agents demo on your own computer in 30 seconds.</p>
       <div class="cta">
         <a class="pill light-btn arrow" href="#service">Make a treaty</a>
         <a class="ghost arrow" href="#live">See the live deal</a>
-        <a class="ghost arrow" href="https://github.com/drained69/qoresplit" target="_blank" rel="noreferrer">Source code</a>
+        <a class="ghost arrow" href="https://github.com/drained69/treaty" target="_blank" rel="noreferrer">Source code</a>
       </div>
-      <pre>git clone https://github.com/drained69/qoresplit && cd qoresplit && npm ci && npm run demo</pre>
+      <pre>git clone https://github.com/drained69/treaty && cd treaty && npm ci && npm run demo</pre>
     </div>
   </section>`;
 }
 
+/** A signatory line: the party, its role, and the transaction that carried its ML-DSA-87 signature. */
+function signatory(name, role, step) {
+  const hash = tx[step]?.tx;
+  return `<div class="signatory"><span class="sig-name">${name}<small>${role}</small></span>
+    <span class="sig-line"><span class="sig-alg">ML-DSA-87 · 4,627 B</span>${hash ? `<a href="${explorer(hash)}">${shortHash(hash)}</a>` : ''}</span></div>`;
+}
+
 function stepHtml(count, title, tagline, body, panel) {
-  return `<article class="step"><div><span class="count">${count} / 04</span><h3>${title}</h3><p class="tagline">${tagline}</p><p class="body">${body}</p></div>
+  return `<article class="step"><div><span class="count">Step ${Number(count)} of 4</span><h3>${title}</h3><p class="tagline">${tagline}</p><p class="body">${body}</p></div>
     <div class="panel">${panel}</div></article>`;
 }
 

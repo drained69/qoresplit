@@ -254,7 +254,7 @@ Further guarantees: signer keys must carry a proof of possession; state is updat
 Requires **Node.js 22.9 or later**.
 
 ```sh
-git clone https://github.com/drained69/qoresplit.git treaty
+git clone https://github.com/drained69/treaty.git
 cd treaty
 npm ci
 npm run demo            # the agents story locally, in about 30 seconds
