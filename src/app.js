@@ -6,7 +6,7 @@ import {
   requestWallet, selectWallet, short, splitAmounts, transact, validateLink, validateService, verifyAgreement, verifyReceipt,
 } from './chain.js';
 import { MAX_PARTIES, deliverableHash } from './protocol.js';
-import { qorexAvailable, signWithQorex } from './qorex.js';
+import { qorexAccount, qorexAvailable, qorexDownload, qorexStatus, signWithQorex } from './qorex.js';
 import { homeHtml, liveFacts, liveHtml, liveParties, liveStateHtml } from './story.js';
 
 const content = document.querySelector('#content');
@@ -157,7 +157,10 @@ async function show(fragment, message) {
   else location.hash = fragment;
 }
 
-const qorexHint = '<p class="muted qorex-hint">Install the <a href="https://qorechain.io" target="_blank" rel="noreferrer">QoreX wallet</a> to sign here with your post-quantum key, or use the signing tool.</p>';
+/** Why there is no QoreX button here, and what to do instead. */
+const qorexHint = () => qorexStatus() === 'cannot-sign-messages'
+  ? '<p class="muted qorex-hint">Your QoreX wallet cannot sign messages yet. Until it can, sign with the signing tool or an agent, and send the signed request below.</p>'
+  : '<p class="muted qorex-hint">Install the <a href="' + qorexDownload + '" target="_blank" rel="noreferrer">QoreX wallet</a> to sign here with your post-quantum key, or use the signing tool.</p>';
 
 /**
  * Sign a Treaty message with QoreX as `expected`, then send the call from the connected EVM wallet.
@@ -428,7 +431,7 @@ async function serviceSection(id, agreement, revision) {
         ? (refundable ? `<p>The deadline passed. ${formatQor(refundable)} of unused budget can go back now.</p><button class="primary" id="refund" type="button">Return ${formatQor(refundable)}</button>` : '<p>The deadline passed and the budget is settled.</p>')
         : `<p>A provider delivers one unit; only the hash of the work goes on chain. The client accepts or rejects it within ${duration(agreement.reviewPeriod)}, or it pays itself.</p>
           ${qorexAvailable() ? `<form id="deliver-form" class="deliver-form"><div class="field"><label for="work">Deliver one unit as a provider</label>
-            <input id="work" name="work" type="file" required></div><button class="primary" type="submit">Deliver with QoreX</button></form>` : qorexHint}
+            <input id="work" name="work" type="file" required></div><button class="primary" type="submit">Deliver with QoreX</button></form>` : qorexHint()}
           ${command('npm run pq -- deliver ' + id + ' --file work.zip')}
           ${command('npm run pq -- accept ' + id + ' <delivery>')}`}</section>`;
   }
@@ -471,7 +474,7 @@ async function agreementPage(id, revision) {
     main = `<section class="card action"><div class="tag warn">${label} · ${signedCount} of ${agreement.signers.length}</div>
       <h2>Every party signs these terms</h2>
       <p>Send this page to every party. People sign with QoreX right here (the button next to their address) or with the Treaty signing tool; agents sign with the Treaty SDK. Every signature is ML-DSA-87, checked on chain.</p>
-      ${qorexAvailable() ? '' : qorexHint}
+      ${qorexAvailable() ? '' : qorexHint()}
       ${command('npm run pq -- sign ' + id)}
       <p>To send a signature from another wallet, add <code>--out signature.json</code> and paste the file below.</p>
       <div class="actions"><button class="secondary" type="button" data-copy="${escape(linkURL(contractRoute('agreement', id)))}">Copy this page’s link</button>
@@ -553,7 +556,6 @@ async function agreementPage(id, revision) {
         if (!file) throw new Error('Choose the file you deliver.');
         const work = deliverableHash(new Uint8Array(await file.arrayBuffer()));
         const signingChain = await getSigningChain();
-        const { qorexAccount } = await import('./qorex.js');
         const { address: provider } = await qorexAccount(signingChain);
         if (!agreement.recipients.some((recipient) => same(recipient, provider))) {
           throw new Error('QoreX is on ' + provider + ', which is not a provider in this treaty.');

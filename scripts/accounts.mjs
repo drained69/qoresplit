@@ -7,6 +7,8 @@
 //   deploy     open a short window for the deployer, deploy Treaty, and save its address
 //   windows    open each party's scoped window: only the Treaty contract, capped transactions,
 //              value and blocks. These are the agents' on-chain limits the AI Agents track asks for.
+//   seal-keys  publish each agent's ML-KEM-1024 key in QoreChain's KEM key registry, so providers
+//              can seal deliveries to it by address (QoreSeal); see sdk/seal.mjs
 //
 // Keys stay in .env.diana on this computer. Use testnet-only accounts that never held mainnet funds.
 import { spawn } from 'node:child_process';
@@ -16,9 +18,11 @@ import { StargateClient } from '@cosmjs/stargate';
 import { evmWindowCost, evmWindowStatus } from '@qorechain/evm';
 import {
   EthNativeSigner, buildRegisterPqcKeyMsg, deriveUnifiedAccount, fetchPqcStatus, generateMnemonic, getNetwork,
-  isRegisteredPqcKey, openEvmWindowMsg, signProofOfPossession,
+  KEM_ALGORITHM_ML_KEM_1024, isRegisteredPqcKey, msg, openEvmWindowMsg, signProofOfPossession,
 } from '@qorechain/sdk';
+import { fetchKemKey } from '@qorechain/qoreseal/network';
 import { formatEther, getAddress, isAddress } from 'viem';
+import { sealKeysFor } from '../sdk/seal.mjs';
 
 const FILE = process.env.TREATY_ACCOUNTS_FILE ? new URL('file://' + process.env.TREATY_ACCOUNTS_FILE) : new URL('../.env.diana', import.meta.url);
 const ROLES = [
@@ -178,11 +182,26 @@ const commands = {
     }
     console.log('Each party can now act only on Treaty, within those limits. Next: npm run demo -- --diana');
   },
+
+  async ['seal-keys']() {
+    for (const { role, mnemonic, account } of (await accounts()).slice(1)) {
+      // The same keys the SDK opens sealed deliveries with: QoreSeal's derivation from the mnemonic.
+      const { mlkemPublicKey } = sealKeysFor({ mnemonic });
+      const current = await fetchKemKey({ rest: NET.rest, address: account.cosmos });
+      if (current.registered && Buffer.from(current.publicKey).equals(Buffer.from(mlkemPublicKey))) {
+        console.log(role.padEnd(11) + 'seal key already published'); continue;
+      }
+      // Registering needs the account's hybrid (ML-DSA-87) signature; registering again replaces the key.
+      const message = msg.pqc.registerKemKey({ sender: account.cosmos, algorithmId: KEM_ALGORITHM_ML_KEM_1024, publicKey: mlkemPublicKey });
+      console.log(role.padEnd(11) + 'seal key published · ' + await broadcast(account, 'hybrid', [message]));
+    }
+    console.log('Providers can now seal deliveries to these agents by address: deliver(id, work, { sealTo: \'chain\' }).');
+  },
 };
 
 const [command = 'status'] = process.argv.slice(2);
 if (!commands[command]) {
-  console.error('Use: npm run accounts -- create | status | register | deploy | windows');
+  console.error('Use: npm run accounts -- create | status | register | deploy | windows | seal-keys');
   process.exit(1);
 }
 commands[command]().catch((error) => {

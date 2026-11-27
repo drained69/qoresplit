@@ -2,6 +2,20 @@
 
 Treaty was called QoreSplit until version 2 and QorePact briefly during version 3.
 
+## Version 3.1: private deliveries and QoreX detection
+
+Scope: QoreSeal sealed deliveries (`sdk/seal.mjs`, `deliver --seal`, `open`, `accounts -- seal-keys`), QoreX detection with `@qorechain/qorex-types`, and tests against the official QoreX mock. The contract did not change, so the deployment and the live run on Diana stand.
+
+| Risk | Resolution |
+| --- | --- |
+| A provider seals one thing and puts the hash of another on chain. | The client's `openDelivery` hashes the plaintext and refuses unless it equals the delivery's hash on chain. |
+| An envelope for one delivery is presented as another treaty's or unit's work. | The envelope's authenticated data names the contract, treaty and unit, and QoreSeal binds the chain and the purpose `treaty-delivery`; opening it as anything else fails. |
+| Someone other than the client reads the work. | It is sealed to the client's ML-KEM-1024 key (plus X25519 in the hybrid mode). Tested: another party's keys, including the co-provider's, cannot open it. |
+| A malformed or substituted seal key. | Keys are checked as the chain checks registered keys (length and the FIPS 203 modulus check) before anything is sealed. A provider should get the key from the client, or from the chain's KEM registry with `sealTo: 'chain'`. |
+| The app offers QoreX signing that today's QoreX would refuse. | QoreX signing is offered only to a build that announces message signing; otherwise the app explains why and points to the signing tool. |
+
+Known limits: QoreSeal hides only the payload (sizes and timing stay public), and its construction is pending external review before its 1.0 release. Seal keys from a mnemonic use QoreSeal's standard derivation; from a private key they use `SHAKE-256("treaty:qoreseal:v1|" + key)`, which only Treaty tools reproduce. `accounts -- seal-keys` follows the same broadcast path as the tested key registration but has not yet been run on Diana.
+
 ## Version 3: service treaties and agent owners
 
 Scope: service treaties (budget, deliveries, review, release, refund), agent mandates (owner limits, switching off, expiry), the SDK, the relayable request format, and the web app's new pages.

@@ -185,8 +185,24 @@ try {
     const data = JSON.parse(content);
     if (data.rows < 1000 || data.nulls > 0) return 'only ' + data.rows + ' rows with ' + data.nulls + ' empty values';
   };
-  for (const [i, content] of datasets.slice(0, 2).entries()) {
-    const { unit } = track('the data agent delivers dataset ' + (i + 1), await databot.treaty.deliver(id, content));
+  // Deliveries are private: the data agent seals each dataset to the research agent with QoreSeal
+  // (ML-KEM-1024 + X25519). Only the hash goes on chain; only the research agent can read the data.
+  const sealKey = researcher.treaty.sealKey();
+  say('The research agent shares its QoreSeal key, so datasets are encrypted to it with ML-KEM-1024.');
+  /** The research agent opens a sealed delivery: it refuses if the data does not match the hash on chain. */
+  const receive = async (unit, envelope) => new TextDecoder().decode(await researcher.treaty.openDelivery(id, unit, envelope));
+  for (const [i, dataset] of datasets.slice(0, 2).entries()) {
+    const { unit, envelope } = track('the data agent delivers dataset ' + (i + 1), await databot.treaty.deliver(id, dataset, { sealTo: sealKey }));
+    if (i === 0) {
+      say('Dataset 1 travels as a ' + envelope.length.toLocaleString('en') + '-character sealed envelope; on chain there is only its hash.');
+      try {
+        await cleaner.treaty.openDelivery(id, unit, envelope);
+        say('Unexpected: the cleaning agent opened data sealed to the research agent.');
+      } catch {
+        say('The cleaning agent tries to open it: it cannot. Only the client holds the ML-KEM-1024 key.');
+      }
+    }
+    const content = await receive(unit, envelope);
     const delivery = await researcher.treaty.read('getDelivery', [id, unit]);
     const problem = judge(content, delivery.deliverable);
     if (problem) {
@@ -197,7 +213,7 @@ try {
       say('Dataset ' + (i + 1) + ' delivered. The research agent checks it and accepts: 1.6 QOR to the data agent, 0.4 to the cleaner.');
     }
   }
-  const { unit: late } = track('the data agent delivers a fixed dataset', await databot.treaty.deliver(id, datasets[2]));
+  const { unit: late } = track('the data agent delivers a fixed dataset', await databot.treaty.deliver(id, datasets[2], { sealTo: sealKey }));
   say('Dataset 2 is delivered again, fixed. This time the research agent is busy and does not answer.');
   await network.wait(network.review + 1);
   track('the cleaning agent releases the ignored delivery', await cleaner.treaty.release(id, late));

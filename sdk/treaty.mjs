@@ -19,6 +19,7 @@ import {
   reviewMessage, signedRequest, splitAmounts, termsHash, termsMessage, windowProblem, withdrawalMessage,
 } from '../src/protocol.js';
 import { loadSigner, registeredKey } from './pqc.mjs';
+import { openDelivery, sealDelivery, sealKeyText, sealRecipient } from './seal.mjs';
 
 export const DIANA = Object.freeze({
   chainId: 9800, rpc: 'https://evm-testnet.qore.host', rest: 'https://api-testnet.qore.host',
@@ -180,17 +181,55 @@ export class Treaty {
     return this.#signed('sign', { id: BigInt(id), signer: me.address }, message, options);
   }
 
-  /** Deliver one unit of work. `content` (string or bytes) is hashed; pass `{ hash }` to give the hash. */
+  /**
+   * Deliver one unit of work. `content` (string or bytes) is hashed; pass `{ hash }` to give the hash.
+   * With `{ sealTo }` (the client's seal key, or `'chain'` for its key in QoreChain's KEM registry)
+   * the work is also encrypted to the client with QoreSeal, and the result carries the `envelope`
+   * to send it. Only the hash of the plaintext goes on chain either way.
+   */
   async deliver(id, content, options = {}) {
     const me = this.#me();
     const agreement = await this.agreement(id);
     if (!isService(agreement)) throw new Error('Agreement #' + id + ' is not a service treaty.');
+    if (options.sealTo && options.hash) throw new Error('A sealed delivery needs the work itself, not only its hash.');
     const deliverable = options.hash ?? deliverableHash(content);
     const unit = BigInt(agreement.deliveries);
+    let envelope;
+    if (options.sealTo) {
+      const { recipient, mode } = await sealRecipient(options.sealTo, { rest: this.rest, client: agreement.client });
+      const plaintext = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+      envelope = sealDelivery({ plaintext, recipient, mode, signingChain: this.signingChain, contract: this.contract, id, unit });
+    }
     const message = deliveryMessage({ chainId: this.chain.id, contract: this.contract, signingChain: this.signingChain, id, unit, provider: me.address, deliverable });
     await this.#same(message, 'deliveryMessage', [BigInt(id), unit, me.address, deliverable]);
     const result = await this.#signed('deliver', { id: BigInt(id), provider: me.address, deliverable }, message, options);
-    return options.relay ? result : { receipt: result, unit, deliverable };
+    if (options.relay) return envelope ? { request: result, envelope } : result;
+    return { receipt: result, unit, deliverable, envelope };
+  }
+
+  /** This account's seal key, to share with providers so they can deliver privately to it. */
+  sealKey() {
+    return sealKeyText(this.#me().sealKeys());
+  }
+
+  /**
+   * Open a sealed delivery as the client. Returns the work's bytes, after checking that they hash
+   * to what the provider delivered on chain; refuses otherwise.
+   */
+  async openDelivery(id, unit, envelope) {
+    const keys = this.#me().sealKeys();
+    const delivery = await this.read('getDelivery', [BigInt(id), BigInt(unit)]);
+    if (DeliveryStatus[delivery.status] === 'None') throw new Error('Treaty #' + id + ' has no delivery ' + unit + '.');
+    let plaintext;
+    try {
+      plaintext = openDelivery({ envelope, keys, signingChain: this.signingChain, contract: this.contract, id, unit });
+    } catch (error) {
+      throw new Error('This envelope does not open with your seal keys for delivery ' + unit + ' of treaty #' + id + ' (' + (error.code ?? error.message) + ').');
+    }
+    if (deliverableHash(plaintext) !== delivery.deliverable) {
+      throw new Error('The sealed work does not match the hash delivered on chain for delivery ' + unit + ' of treaty #' + id + '.');
+    }
+    return plaintext;
   }
 
   accept(id, unit, options) { return this.#review(id, unit, true, options); }
