@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { nativeRead } from './server/native.mjs';
+import { nativeRead } from './server/native.js';
 
 function nativeRoutes(server) {
   server.middlewares.use(async (request, response, next) => {
