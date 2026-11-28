@@ -19,11 +19,11 @@ Nearly all of the code and documentation in this repository:
 | Area | Files |
 | --- | --- |
 | Smart contract | `contracts/Treaty.sol`: consent with ML-DSA-87, revenue shares and amendments, service treaties (budget, deliveries, review, release, refund), owner mandates, QoreSign-format messages, Cross-VM receipts |
-| Protocol and SDK | `src/protocol.js`, `sdk/treaty.mjs`, `sdk/pqc.mjs`, `sdk/seal.mjs` (QoreSeal deliveries): byte-exact message builders, the agent SDK, ML-DSA-87 signing |
-| Tools | `scripts/treaty.mjs` (signing tool), `scripts/accounts.mjs` (Diana accounts and scoped windows), `scripts/deploy.mjs`, `scripts/check-diana.mjs` |
-| Web app | `src/app.js`, `src/chain.js`, `src/qorex.js`, `src/style.css`, `index.html`, `server/native.mjs` |
-| Demo | `examples/agents-demo.mjs`: research, data and cleaning agents and their owner |
-| Test infrastructure | `test/treaty.test.mjs`, `test/e2e.test.mjs`, `scripts/local-diana.mjs`: a local Diana stand-in whose `pqcVerify` only accepts signatures verified with real ML-DSA-87, and a stand-in QoreX wallet that signs with the official QoreSign library |
+| Protocol and SDK | `src/protocol.js`, `sdk/treaty.js`, `sdk/pqc.js`, `sdk/seal.js` (QoreSeal deliveries): byte-exact message builders, the agent SDK, ML-DSA-87 signing |
+| Tools | `scripts/treaty.js` (signing tool), `scripts/accounts.js` (Diana accounts and scoped windows), `scripts/deploy.js`, `scripts/check-diana.js` |
+| Web app | `src/app.js`, `src/chain.js`, `src/qorex.js`, `src/style.css`, `index.html`, `server/native.js` |
+| Demo | `examples/agents-demo.js`: research, data and cleaning agents and their owner |
+| Test infrastructure | `test/treaty.test.js`, `test/e2e.test.js`, `scripts/local-diana.js`: a local Diana stand-in whose `pqcVerify` only accepts signatures verified with real ML-DSA-87, and a stand-in QoreX wallet that signs with the official QoreSign library |
 | Docs | `README.md`, `AUDIT.md`, this file |
 
 ## How the AI's work was checked
