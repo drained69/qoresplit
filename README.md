@@ -21,6 +21,7 @@ Owners set limits their agents cannot break, and can switch them off.
 
 ## Contents
 
+1. [Review in 3 minutes](#review-in-3-minutes)
 1. [Overview](#overview)
 2. [Website](#website)
 3. [Live on Diana](#live-on-diana)
@@ -35,6 +36,28 @@ Owners set limits their agents cannot break, and can switch them off.
 12. [Video](#video)
 13. [Status and roadmap](#status-and-roadmap)
 14. [Credits and licence](#credits-and-licence)
+
+## Review in 3 minutes
+
+**What it does.** AI agents (and people) agree on a job, sign the exact terms with post-quantum ML-DSA-87 keys, and a contract on QoreChain holds the budget and pays only for accepted work, inside limits the agent's human owner sets and can revoke.
+
+**What is new.** Agent wallets with spending limits usually keep those limits in the agent's own code, and escrow contracts usually trust whoever holds an ordinary wallet key. Treaty combines, in one contract: multi-party consent where every signature is ML-DSA-87 and checked on chain against the chain's own key registry; an owner mandate the contract enforces (per deal, in total, until a date, with an off switch); budgets that pay per accepted delivery and release themselves if the client goes silent; and deliveries sealed to the client with ML-KEM-1024. A stolen or quantum-broken secp256k1 key can move nothing.
+
+**Why on chain.** The parties are agents that do not trust each other or a server. The contract holds the money and its rules are public; there is no operator in between.
+
+**Who holds the keys.** Nobody holds a privileged key. The contract has no owner, admin, pause or upgrade path. Anyone may relay a signed action, because the ML-DSA-87 signature, not the sender, is what authorises it.
+
+| Check | Evidence |
+| --- | --- |
+| Post-quantum check on every signed action | [`_requirePqcSignature`](https://github.com/drained69/treaty/blob/main/contracts/Treaty.sol#L642-L647): `pqcKeyStatus` (registered key with proof of possession), then `pqcVerify` |
+| Owner limits enforced by the contract | [`_checkMandate`](https://github.com/drained69/treaty/blob/main/contracts/Treaty.sol#L629-L634), checked when the agent signs and when the budget is locked |
+| No classical-key path to money | [`withdraw`](https://github.com/drained69/treaty/blob/main/contracts/Treaty.sol#L496-L507) needs an ML-DSA-87 signature over recipient, destination, amount and nonce |
+| Records on both VMs | [`_record`](https://github.com/drained69/treaty/blob/main/contracts/Treaty.sol#L651) writes every agreement and payment to QoreChain Native in the same transaction |
+| Private deliveries | [`sdk/seal.js`](https://github.com/drained69/treaty/blob/main/sdk/seal.js): QoreSeal sealing, and the client's check against the hash on chain |
+| Real transactions | Two complete 18-transaction runs from the same five accounts: [Treaty #1](https://github.com/drained69/treaty/blob/main/deployments/diana-demo.json) (26 November) and [Treaty #7](https://github.com/drained69/treaty/blob/main/deployments/runs/treaty-7.json) (27 November); four seal keys published ([`seal-keys.json`](https://github.com/drained69/treaty/blob/main/deployments/seal-keys.json)) |
+| Attacks refused on chain | Stolen classical key: `BadPqcSignature` · overspending: `MandateLimitExceeded` · switched-off agent: `AgentNotAuthorized` |
+| Tests | 34 unit tests and 6 end-to-end tests (a real browser, real ML-DSA-87 keys), run by [CI](https://github.com/drained69/treaty/actions/workflows/ci.yml) on every change |
+| Built at the event | Building opened on 4 November; the first commit is from 21 November, and every commit is public. How AI was used: [`AI_USAGE.md`](AI_USAGE.md) |
 
 ## Overview
 
